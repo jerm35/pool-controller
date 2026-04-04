@@ -11,6 +11,11 @@
  *   POST /pool/schedules          — Save a schedule to KV
  *   DELETE /pool/schedules/:id    — Delete a schedule from KV
  *
+ * WebTouch (panel emulator) routes:
+ *   GET  /webtouch/init           — Start a WebTouch session, returns panel state
+ *   POST /webtouch/command        — Send navigation/keypad command
+ *   GET  /webtouch/poll           — Poll for display updates
+ *
  * Cron trigger runs every minute to check & execute scheduled commands.
  *
  * Secrets:
@@ -25,6 +30,7 @@ const IAQUALINK_API_KEY = 'EOOEMOW4YR6QNB07';
 const ZODIAC_LOGIN_URL = 'https://prod.zodiac-io.com/users/v1/login';
 const DEVICES_URL = 'https://r-api.iaqualink.net/devices.json';
 const SESSION_URL = 'https://p-api.iaqualink.net/v1/mobile/session.json';
+const WEBTOUCH_URL = 'https://prm.iaqualink.net/webtouch';
 
 const ALLOWED_ORIGINS = [
   'https://jerm35.github.io',
@@ -78,19 +84,23 @@ async function getSession(env) {
     sessionId: data.session_id || data.authentication_token,
     authToken: data.authentication_token,
     userId: data.id || data.user_id,
+    idToken: data.userPoolOAuth?.IdToken || null,
     expiry: Date.now() + 3500 * 1000, // ~58 min
   };
 
-  // Get serial number for the pool system
+  // Get serial number and device action IDs for the pool system
   const devResp = await fetch(
     `${DEVICES_URL}?api_key=${IAQUALINK_API_KEY}&authentication_token=${session.authToken}&user_id=${session.userId}`,
     { headers: { 'User-Agent': 'okhttp/3.14.7' } }
   );
   const devices = await devResp.json();
   if (devices && devices.length > 0) {
-    session.serial = devices[0].serial_number;
-    session.deviceId = devices[0].id;
-    session.name = devices[0].name;
+    const dev = devices[0];
+    session.serial = dev.serial_number;
+    session.deviceId = dev.id;
+    session.name = dev.name;
+    // Store full device info for WebTouch
+    session.device = dev;
   }
 
   await env.POOL_KV.put('session', JSON.stringify(session), { expirationTtl: 3600 });
@@ -227,6 +237,266 @@ async function handleDeleteSchedule(env, origin, id) {
   return jsonResponse({ ok: true }, origin);
 }
 
+// --- WebTouch Panel Emulator ---
+
+async function handleWebTouchInit(env, origin) {
+  try {
+  const session = await getSession(env);
+
+  // Clear any existing webtouch session to start fresh
+  await env.POOL_KV.delete('webtouch_session');
+
+  // Step 1: Get the v2 session user ID via /userId endpoint
+  const v2Headers = {
+    'User-Agent': 'Mozilla/5.0',
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+  if (session.idToken) {
+    v2Headers['Authorization'] = 'Bearer ' + session.idToken;
+  }
+
+  const userIdResp = await fetch('https://prm.iaqualink.net/v2/userId', {
+    headers: v2Headers,
+  });
+
+  let v2SessionId;
+  const userIdBody = await userIdResp.text();
+  if (userIdResp.ok) {
+    try {
+      const userIdData = JSON.parse(userIdBody);
+      v2SessionId = userIdData.session_user_id || userIdData.sessionId;
+    } catch (_) {}
+  }
+
+  if (!v2SessionId) {
+    return jsonResponse({
+      ok: false,
+      error: 'Failed to get v2 session user ID',
+      debug: { status: userIdResp.status, body: userIdBody.substring(0, 1000) },
+    }, origin, 500);
+  }
+
+  // Step 2: Get locations with touchLink
+  const locResp = await fetch(
+    `https://prm.iaqualink.net/v2/users/${v2SessionId}/locations`,
+    { headers: v2Headers }
+  );
+
+  const locBody = await locResp.text();
+  let touchLink = null;
+  let locData = null;
+
+  if (locResp.ok) {
+    try {
+      locData = JSON.parse(locBody);
+      // Find our device in the locations array
+      const locations = locData.locations || locData;
+      if (Array.isArray(locations)) {
+        for (const loc of locations) {
+          const devices = loc.devices || [];
+          for (const dev of devices) {
+            if (dev.serial_number === session.serial || dev.id == session.deviceId) {
+              touchLink = dev.touchLink || dev.touch_link;
+            }
+          }
+          if (!touchLink && loc.touchLink) touchLink = loc.touchLink;
+        }
+      }
+      if (!touchLink && locData.touchLink) touchLink = locData.touchLink;
+    } catch (_) {}
+  }
+
+  if (!touchLink) {
+    return jsonResponse({
+      ok: false,
+      error: 'Could not find touchLink in locations API',
+      debug: {
+        v2SessionId,
+        locStatus: locResp.status,
+        locBody: locBody.substring(0, 3000),
+      },
+    }, origin, 500);
+  }
+
+  // Step 2: Init WebTouch with the touchLink as actionID
+  // Prefer v2 (idToken) auth if available, fallback to v1 (sessionID)
+  let initUrl;
+  let initHeaders = { 'User-Agent': 'Mozilla/5.0' };
+  if (session.idToken) {
+    initUrl = `https://prm.iaqualink.net/v2/webtouch/init?actionID=${touchLink}&idToken=${session.idToken}`;
+    initHeaders['Authorization'] = session.idToken;
+  } else {
+    initUrl = `${WEBTOUCH_URL}/init?actionID=${touchLink}&sessionID=${session.sessionId}`;
+  }
+  const resp = await fetch(initUrl, {
+    headers: initHeaders,
+    redirect: 'follow',
+  });
+
+  const text = await resp.text();
+
+  // Parse the init response — v2 returns JSON
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    // Fallback: try regex for HTML/JS response (v1)
+    parsed = {};
+    const patterns = {
+      systemType: /systemType\s*=\s*['"]?(-?\d+)['"]?/,
+      actionIdMasterId: /actionIdMasterId\s*=\s*['"]([^'"]+)['"]/,
+      actionIdMasterStart: /actionIdMasterStart\s*=\s*['"]([^'"]+)['"]/,
+      actionIdMasterSTB: /actionIdMasterSTB\s*=\s*['"]([^'"]+)['"]/,
+      actionIdMasteReset: /actionIdMasteReset\s*=\s*['"]([^'"]+)['"]/,
+      serverConnection: /serverConnection\s*=\s*['"]([^'"]+)['"]/,
+      deviceLabel: /deviceLabel\s*=\s*['"]([^'"]+)['"]/,
+    };
+    for (const [key, regex] of Object.entries(patterns)) {
+      const m = text.match(regex);
+      if (m) parsed[key] = m[1];
+    }
+  }
+
+  if (!parsed.serverConnection && !parsed.actionIdMasterId) {
+    return jsonResponse({
+      ok: false,
+      error: 'Failed to parse WebTouch init',
+      debug: { status: resp.status, body: text.substring(0, 2000) },
+    }, origin, 500);
+  }
+
+  // Store WebTouch session info for subsequent commands
+  const wtSession = {
+    masterId: parsed.actionIdMasterId,
+    masterStart: parsed.actionIdMasterStart,
+    masterSTB: parsed.actionIdMasterSTB,
+    masterReset: parsed.actionIdMasteReset,
+    serverConnection: parsed.serverConnection,
+    systemType: parsed.systemType || 0,
+    deviceLabel: parsed.label || parsed.deviceLabel,
+    touchLink,
+    idToken: session.idToken,
+    expiry: Date.now() + 3500 * 1000,
+  };
+
+  await env.POOL_KV.put('webtouch_session', JSON.stringify(wtSession), { expirationTtl: 3600 });
+
+  return jsonResponse({ ok: true, webtouch: wtSession }, origin);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: 'WebTouch init failed: ' + e.message, stack: e.stack }, origin, 500);
+  }
+}
+
+async function getWebTouchSession(env) {
+  const cached = await env.POOL_KV.get('webtouch_session', { type: 'json' });
+  if (cached && cached.expiry > Date.now()) return cached;
+  return null;
+}
+
+async function handleWebTouchCommand(env, origin, request) {
+  const wt = await getWebTouchSession(env);
+  if (!wt) {
+    return jsonResponse({ ok: false, error: 'No WebTouch session — call /webtouch/init first' }, origin, 400);
+  }
+
+  const body = await request.json();
+  const { type, value } = body;
+  // type: 'nav' (1-6), 'key' (digit), 'enter', 'back', 'action' (custom actionID)
+
+  // Commands go to the webtouch base with the masterId
+  const wtBase = 'https://webtouch.iaqualink.net';
+  let cmdUrl;
+  if (type === 'nav') {
+    // Navigation: home=1, menu=2, onetouch=3, help=4, back=5, status=6
+    cmdUrl = `${wtBase}?actionID=${wt.masterId}&command=${value}`;
+  } else if (type === 'key') {
+    cmdUrl = `${wtBase}?actionID=${wt.masterId}&command=add_to_telephone&value=${value}`;
+  } else if (type === 'enter') {
+    cmdUrl = `${wtBase}?actionID=${wt.masterId}&command=enter`;
+  } else if (type === 'back') {
+    cmdUrl = `${wtBase}?actionID=${wt.masterId}&command=5`;
+  } else if (type === 'select') {
+    cmdUrl = `${wtBase}?actionID=${wt.masterId}&command=select_${value}`;
+  } else {
+    return jsonResponse({ ok: false, error: 'Unknown command type' }, origin, 400);
+  }
+
+  const cmdHeaders = { 'User-Agent': 'Mozilla/5.0' };
+  if (wt.idToken) cmdHeaders['Authorization'] = 'Bearer ' + wt.idToken;
+
+  const resp = await fetch(cmdUrl, {
+    headers: cmdHeaders,
+    redirect: 'follow',
+  });
+
+  const text = await resp.text();
+  return jsonResponse({ ok: true, raw: text.substring(0, 5000) }, origin);
+}
+
+async function handleWebTouchPoll(env, origin) {
+  const wt = await getWebTouchSession(env);
+  if (!wt) {
+    return jsonResponse({ ok: false, error: 'No WebTouch session — call /webtouch/init first' }, origin, 400);
+  }
+
+  if (!wt.serverConnection) {
+    return jsonResponse({ ok: false, error: 'No streaming URL in WebTouch session' }, origin, 400);
+  }
+
+  // The streaming endpoint is a long-polling chunked response.
+  // We fetch it and read the body as a stream, collecting printNL data
+  // for up to 25 seconds (within CF Worker's 30s limit).
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 25000);
+
+  try {
+    const resp = await fetch(wt.serverConnection, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: controller.signal,
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const lines = [];
+    const startTime = Date.now();
+
+    while (true) {
+      // Stop after 20s or if we have data and it's been 3s since last chunk
+      if (Date.now() - startTime > 20000) break;
+
+      const { done, value } = await Promise.race([
+        reader.read(),
+        new Promise(resolve => setTimeout(() => resolve({ done: true, value: null, timeout: true }), 5000)),
+      ]);
+
+      if (done) break;
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        // Extract printNL calls
+        const regex = /parent\.printNL\(([^)]*)\)/g;
+        let match;
+        while ((match = regex.exec(buffer)) !== null) {
+          lines.push(match[1]);
+        }
+        // If we got printNL data (not just OFFLINE), we can return early
+        if (lines.length > 0 && !lines.every(l => l.includes('OFFLINE'))) break;
+      }
+    }
+
+    clearTimeout(deadline);
+    reader.cancel().catch(() => {});
+
+    return jsonResponse({ ok: true, lines }, origin);
+  } catch (e) {
+    clearTimeout(deadline);
+    if (e.name === 'AbortError') {
+      return jsonResponse({ ok: true, lines: [] }, origin);
+    }
+    return jsonResponse({ ok: false, error: e.message }, origin, 500);
+  }
+}
+
 // --- Cron: Execute Scheduled Commands ---
 
 async function handleScheduledEvent(env) {
@@ -302,6 +572,17 @@ export default {
       if (path.startsWith('/pool/schedules/') && request.method === 'DELETE') {
         const id = path.split('/').pop();
         return handleDeleteSchedule(env, validOrigin, id);
+      }
+
+      // WebTouch routes
+      if (path === '/webtouch/init') {
+        return handleWebTouchInit(env, validOrigin);
+      }
+      if (path === '/webtouch/command' && request.method === 'POST') {
+        return handleWebTouchCommand(env, validOrigin, request);
+      }
+      if (path === '/webtouch/poll') {
+        return handleWebTouchPoll(env, validOrigin);
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders(validOrigin) });
