@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Pool Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏊</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <!-- Ambient background -->
+    <div class="ambient-bg">
+      <div class="ripple r1"></div>
+      <div class="ripple r2"></div>
+      <div class="ripple r3"></div>
+    </div>
+
+    <!-- Connection overlay -->
+    <div id="connect-overlay" class="overlay">
+      <div class="overlay-content">
+        <div class="pool-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 40c4-4 8-4 12 0s8 4 12 0 8-4 12 0 8 4 12 0" stroke-linecap="round"/>
+            <path d="M8 48c4-4 8-4 12 0s8 4 12 0 8-4 12 0 8 4 12 0" stroke-linecap="round" opacity="0.5"/>
+            <circle cx="32" cy="24" r="8"/>
+            <path d="M24 18l-4-6M40 18l4-6M32 16v-8"/>
+          </svg>
+        </div>
+        <h1>Pool Control</h1>
+        <p class="subtitle">Connecting to iAqualink...</p>
+        <div class="loader"><div></div><div></div><div></div></div>
+        <p id="connect-error" class="error-text" hidden></p>
+        <button id="retry-btn" class="btn btn-primary" hidden>Retry Connection</button>
+      </div>
+    </div>
+
+    <!-- Main dashboard -->
+    <div id="dashboard" class="dashboard" hidden>
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <h1 class="logo">Pool Control</h1>
+          <span id="system-name" class="system-badge"></span>
+        </div>
+        <div class="header-right">
+          <span id="status-dot" class="status-dot online"></span>
+          <button id="refresh-btn" class="btn-icon" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0115.36-6.36L21 8M3 22v-6h6M21 12a9 9 0 01-15.36 6.36L3 16"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Nav tabs -->
+      <nav class="tab-nav">
+        <button class="tab active" data-tab="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+          <span>Status</span>
+        </button>
+        <button class="tab" data-tab="lights">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <span>Lights</span>
+        </button>
+        <button class="tab" data-tab="speed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Speed</span>
+        </button>
+        <button class="tab" data-tab="schedule">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span>Schedule</span>
+        </button>
+      </nav>
+
+      <!-- Tab panels -->
+      <main class="panels">
+
+        <!-- STATUS PANEL -->
+        <section id="panel-status" class="panel active">
+          <!-- Temperature cards -->
+          <div class="temp-grid">
+            <div class="temp-card pool-temp">
+              <div class="temp-label">Pool</div>
+              <div class="temp-value"><span id="pool-temp">--</span><span class="temp-unit">°F</span></div>
+              <div class="temp-ring">
+                <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fill" id="pool-ring"/></svg>
+              </div>
+            </div>
+            <div class="temp-card spa-temp">
+              <div class="temp-label">Spa</div>
+              <div class="temp-value"><span id="spa-temp">--</span><span class="temp-unit">°F</span></div>
+              <div class="temp-ring">
+                <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fill" id="spa-ring"/></svg>
+              </div>
+            </div>
+            <div class="temp-card air-temp">
+              <div class="temp-label">Air</div>
+              <div class="temp-value"><span id="air-temp">--</span><span class="temp-unit">°F</span></div>
+              <div class="temp-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Equipment toggles -->
+          <div class="section-header">
+            <h2>Equipment</h2>
+          </div>
+          <div class="equip-grid" id="equip-grid">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Temperature setpoints -->
+          <div class="section-header">
+            <h2>Setpoints</h2>
+          </div>
+          <div class="setpoint-row">
+            <div class="setpoint">
+              <label>Pool Heat</label>
+              <div class="setpoint-control">
+                <button class="btn-round" data-setpoint="pool" data-dir="-1">−</button>
+                <span id="pool-setpoint" class="setpoint-value">--</span>
+                <button class="btn-round" data-setpoint="pool" data-dir="1">+</button>
+              </div>
+            </div>
+            <div class="setpoint">
+              <label>Spa Heat</label>
+              <div class="setpoint-control">
+                <button class="btn-round" data-setpoint="spa" data-dir="-1">−</button>
+                <span id="spa-setpoint" class="setpoint-value">--</span>
+                <button class="btn-round" data-setpoint="spa" data-dir="1">+</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- LIGHTS PANEL -->
+        <section id="panel-lights" class="panel">
+          <div class="section-header">
+            <h2>Pool Lights</h2>
+          </div>
+          <div id="lights-list" class="lights-list">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Color effect picker -->
+          <div id="color-panel" class="color-panel" hidden>
+            <div class="section-header">
+              <h2 id="color-panel-title">Light Effects</h2>
+              <button id="color-close" class="btn-icon small">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <!-- Brightness slider (for dimmable lights) -->
+            <div id="brightness-section" hidden>
+              <label class="slider-label">Brightness</label>
+              <div class="brightness-slider">
+                <input type="range" id="brightness-range" min="0" max="100" step="25" value="100">
+                <div class="brightness-marks">
+                  <span>Off</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Color effects (for color lights) -->
+            <div id="effects-section" hidden>
+              <label class="slider-label">Color Effects</label>
+              <div id="effects-grid" class="effects-grid">
+                <!-- Populated by JS based on light subtype -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEED / ONETOUCH PANEL -->
+        <section id="panel-speed" class="panel">
+          <div class="section-header">
+            <h2>Quick Actions</h2>
+            <p class="section-desc">OneTouch buttons — configure pump speed presets on your AqualinkRS panel</p>
+          </div>
+          <div id="onetouch-grid" class="onetouch-grid">
+            <!-- Populated by JS -->
+          </div>
+
+          <div class="section-header" style="margin-top:2rem">
+            <h2>Devices</h2>
+          </div>
+          <div id="aux-grid" class="aux-grid">
+            <!-- Populated by JS -->
+          </div>
+        </section>
+
+        <!-- SCHEDULE PANEL -->
+        <section id="panel-schedule" class="panel">
+          <div class="section-header">
+            <h2>Schedules</h2>
+            <button id="add-schedule-btn" class="btn btn-primary btn-sm">+ Add</button>
+          </div>
+          <div id="schedules-list" class="schedules-list">
+            <div class="empty-state" id="no-schedules">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="empty-icon"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+              <p>No schedules yet</p>
+              <p class="small">Create schedules to automate your pool equipment</p>
+            </div>
+          </div>
+
+          <!-- Schedule editor modal -->
+          <div id="schedule-modal" class="modal" hidden>
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+              <h3 id="modal-title">New Schedule</h3>
+              <div class="form-group">
+                <label>Label</label>
+                <input type="text" id="sched-label" placeholder="e.g. Morning pump low speed" class="input">
+              </div>
+              <div class="form-group">
+                <label>Time</label>
+                <input type="time" id="sched-time" class="input">
+              </div>
+              <div class="form-group">
+                <label>Days</label>
+                <div class="day-picker" id="day-picker">
+                  <button class="day-btn active" data-day="mon">M</button>
+                  <button class="day-btn active" data-day="tue">T</button>
+                  <button class="day-btn active" data-day="wed">W</button>
+                  <button class="day-btn active" data-day="thu">T</button>
+                  <button class="day-btn active" data-day="fri">F</button>
+                  <button class="day-btn active" data-day="sat">S</button>
+                  <button class="day-btn active" data-day="sun">S</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Command</label>
+                <select id="sched-command" class="input">
+                  <option value="">Select action...</option>
+                  <optgroup label="Pumps">
+                    <option value="set_pool_pump">Toggle Pool Pump</option>
+                    <option value="set_spa_pump">Toggle Spa Pump</option>
+                  </optgroup>
+                  <optgroup label="Heaters">
+                    <option value="set_pool_heater">Toggle Pool Heater</option>
+                    <option value="set_spa_heater">Toggle Spa Heater</option>
+                    <option value="set_solar_heater">Toggle Solar Heater</option>
+                  </optgroup>
+                  <optgroup label="OneTouch Presets">
+                    <option value="set_onetouch_2">OneTouch 2</option>
+                    <option value="set_onetouch_3">OneTouch 3</option>
+                    <option value="set_onetouch_4">OneTouch 4</option>
+                    <option value="set_onetouch_5">OneTouch 5</option>
+                    <option value="set_onetouch_6">OneTouch 6</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div class="modal-actions">
+                <button id="sched-cancel" class="btn btn-ghost">Cancel</button>
+                <button id="sched-save" class="btn btn-primary">Save Schedule</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Toast notifications -->
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
