@@ -146,10 +146,17 @@ let state = {
 // ---- API Helpers ----
 async function api(path, options = {}) {
   const resp = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    mode: 'cors',
   });
-  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`API ${resp.status}: ${text || resp.statusText}`);
+  }
   return resp.json();
 }
 
@@ -178,12 +185,16 @@ async function connect() {
 
     document.getElementById('system-name').textContent = loginResp.name || loginResp.serial;
 
-    // Load all data in parallel
-    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadSchedules()]);
+    // Load all data — don't let individual failures block the dashboard
+    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules()]);
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.warn(`Load ${i} failed:`, r.reason);
+    });
 
     overlay.hidden = true;
     dashboard.hidden = false;
   } catch (e) {
+    console.error('Connect error:', e);
     errorEl.textContent = e.message;
     errorEl.hidden = false;
     retryBtn.hidden = false;
@@ -272,7 +283,7 @@ function renderStatus() {
   setRing('pool-ring', parseInt(poolTemp) || 0, 40, 100);
   setRing('spa-ring', parseInt(spaTemp) || 0, 60, 110);
 
-  // Equipment toggles
+  // Equipment toggles — only show equipment that exists (non-empty values)
   const equipGrid = document.getElementById('equip-grid');
   const equipment = [
     { key: 'pool_pump', label: 'Pool Pump', cmd: 'set_pool_pump' },
@@ -281,7 +292,7 @@ function renderStatus() {
     { key: 'spa_heater', label: 'Spa Heat', cmd: 'set_spa_heater' },
     { key: 'solar_heater', label: 'Solar Heat', cmd: 'set_solar_heater' },
     { key: 'freeze_protection', label: 'Freeze Protect', cmd: null },
-  ];
+  ].filter(eq => h[eq.key] !== undefined && h[eq.key] !== '');
 
   equipGrid.innerHTML = equipment.map(eq => {
     const isOn = h[eq.key] === '1' || h[eq.key] === '3';
@@ -295,7 +306,9 @@ function renderStatus() {
     `;
   }).join('');
 
-  // Setpoints (use stored values since API doesn't return them directly here)
+  // Setpoints from API
+  if (h.pool_set_point) state.poolSetpoint = parseInt(h.pool_set_point);
+  if (h.spa_set_point) state.spaSetpoint = parseInt(h.spa_set_point);
   document.getElementById('pool-setpoint').textContent = state.poolSetpoint;
   document.getElementById('spa-setpoint').textContent = state.spaSetpoint;
 }
