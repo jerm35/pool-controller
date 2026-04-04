@@ -91,13 +91,6 @@
                 <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fill" id="pool-ring"/></svg>
               </div>
             </div>
-            <div class="temp-card spa-temp">
-              <div class="temp-label">Spa</div>
-              <div class="temp-value"><span id="spa-temp">--</span><span class="temp-unit">°F</span></div>
-              <div class="temp-ring">
-                <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fill" id="spa-ring"/></svg>
-              </div>
-            </div>
             <div class="temp-card air-temp">
               <div class="temp-label">Air</div>
               <div class="temp-value"><span id="air-temp">--</span><span class="temp-unit">°F</span></div>
@@ -126,14 +119,6 @@
                 <button class="btn-round" data-setpoint="pool" data-dir="-1">−</button>
                 <span id="pool-setpoint" class="setpoint-value">--</span>
                 <button class="btn-round" data-setpoint="pool" data-dir="1">+</button>
-              </div>
-            </div>
-            <div class="setpoint">
-              <label>Spa Heat</label>
-              <div class="setpoint-control">
-                <button class="btn-round" data-setpoint="spa" data-dir="-1">−</button>
-                <span id="spa-setpoint" class="setpoint-value">--</span>
-                <button class="btn-round" data-setpoint="spa" data-dir="1">+</button>
               </div>
             </div>
           </div>
@@ -239,14 +224,11 @@
                 <label>Command</label>
                 <select id="sched-command" class="input">
                   <option value="">Select action...</option>
-                  <optgroup label="Pumps">
+                  <optgroup label="Pump">
                     <option value="set_pool_pump">Toggle Pool Pump</option>
-                    <option value="set_spa_pump">Toggle Spa Pump</option>
                   </optgroup>
-                  <optgroup label="Heaters">
+                  <optgroup label="Heater">
                     <option value="set_pool_heater">Toggle Pool Heater</option>
-                    <option value="set_spa_heater">Toggle Spa Heater</option>
-                    <option value="set_solar_heater">Toggle Solar Heater</option>
                   </optgroup>
                   <optgroup label="OneTouch Presets">
                     <option value="set_onetouch_2">OneTouch 2</option>

@@ -119,10 +119,7 @@ const LIGHT_EFFECTS = {
 
 const COMMAND_LABELS = {
   set_pool_pump: 'Pool Pump',
-  set_spa_pump: 'Spa Pump',
   set_pool_heater: 'Pool Heater',
-  set_spa_heater: 'Spa Heater',
-  set_solar_heater: 'Solar Heater',
   set_onetouch_2: 'OneTouch 2',
   set_onetouch_3: 'OneTouch 3',
   set_onetouch_4: 'OneTouch 4',
@@ -139,7 +136,6 @@ let state = {
   onetouch: [],
   schedules: [],
   poolSetpoint: 80,
-  spaSetpoint: 100,
   selectedLight: null,
 };
 
@@ -272,16 +268,13 @@ function renderStatus() {
 
   // Temperatures
   const poolTemp = h.pool_temp || '--';
-  const spaTemp = h.spa_temp || '--';
   const airTemp = h.air_temp || '--';
 
   document.getElementById('pool-temp').textContent = poolTemp;
-  document.getElementById('spa-temp').textContent = spaTemp;
   document.getElementById('air-temp').textContent = airTemp;
 
-  // Temperature rings (0-110°F range)
+  // Temperature ring (40-100°F range)
   setRing('pool-ring', parseInt(poolTemp) || 0, 40, 100);
-  setRing('spa-ring', parseInt(spaTemp) || 0, 60, 110);
 
   // Equipment toggles — only show equipment that exists (non-empty values)
   const equipGrid = document.getElementById('equip-grid');
@@ -308,9 +301,7 @@ function renderStatus() {
 
   // Setpoints from API
   if (h.pool_set_point) state.poolSetpoint = parseInt(h.pool_set_point);
-  if (h.spa_set_point) state.spaSetpoint = parseInt(h.spa_set_point);
   document.getElementById('pool-setpoint').textContent = state.poolSetpoint;
-  document.getElementById('spa-setpoint').textContent = state.spaSetpoint;
 }
 
 function setRing(id, value, min, max) {
@@ -635,20 +626,15 @@ function setupEvents() {
   // Setpoint controls
   document.querySelectorAll('[data-setpoint]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const which = btn.dataset.setpoint;
       const dir = parseInt(btn.dataset.dir);
-      if (which === 'pool') state.poolSetpoint = Math.max(40, Math.min(104, state.poolSetpoint + dir));
-      else state.spaSetpoint = Math.max(40, Math.min(104, state.spaSetpoint + dir));
-
-      document.getElementById(`${which}-setpoint`).textContent =
-        which === 'pool' ? state.poolSetpoint : state.spaSetpoint;
+      state.poolSetpoint = Math.max(40, Math.min(104, state.poolSetpoint + dir));
+      document.getElementById('pool-setpoint').textContent = state.poolSetpoint;
 
       // Debounce the API call
       clearTimeout(btn._debounce);
       btn._debounce = setTimeout(async () => {
         try {
           await sendCommand('set_temps', {
-            temp1: String(state.spaSetpoint),
             temp2: String(state.poolSetpoint),
           });
           toast('Temperature updated', 'success');

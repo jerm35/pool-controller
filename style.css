@@ -290,6 +290,10 @@ body {
   margin-bottom: 1.5rem;
 }
 
+.temp-grid > :first-child:nth-last-child(2) {
+  grid-column: 1 / -1;
+}
+
 .temp-card {
   position: relative;
   background: var(--bg-card);
