@@ -127,39 +127,16 @@
         <!-- LIGHTS PANEL -->
         <section id="panel-lights" class="panel">
           <div class="section-header">
-            <h2>Pool Lights</h2>
+            <h2>Pool Light</h2>
+            <button id="light-off-btn" class="btn btn-off btn-sm">Turn Off</button>
           </div>
-          <div id="lights-list" class="lights-list">
+          <div id="light-status" class="light-status"></div>
+
+          <div class="section-header" style="margin-top:1rem">
+            <h2>Colors</h2>
+          </div>
+          <div id="effects-grid" class="effects-grid">
             <!-- Populated by JS -->
-          </div>
-
-          <!-- Color effect picker -->
-          <div id="color-panel" class="color-panel" hidden>
-            <div class="section-header">
-              <h2 id="color-panel-title">Light Effects</h2>
-              <button id="color-close" class="btn-icon small">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-
-            <!-- Brightness slider (for dimmable lights) -->
-            <div id="brightness-section" hidden>
-              <label class="slider-label">Brightness</label>
-              <div class="brightness-slider">
-                <input type="range" id="brightness-range" min="0" max="100" step="25" value="100">
-                <div class="brightness-marks">
-                  <span>Off</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Color effects (for color lights) -->
-            <div id="effects-section" hidden>
-              <label class="slider-label">Color Effects</label>
-              <div id="effects-grid" class="effects-grid">
-                <!-- Populated by JS based on light subtype -->
-              </div>
-            </div>
           </div>
         </section>
 

@@ -318,41 +318,32 @@ function renderDevices() {
 }
 
 function renderLights() {
-  const lightsList = document.getElementById('lights-list');
-  const lights = state.devices.filter(d => d.type === '1' || d.type === '2');
+  const light = state.devices.find(d => d.type === '1' || d.type === '2');
+  const statusEl = document.getElementById('light-status');
+  const offBtn = document.getElementById('light-off-btn');
+  const grid = document.getElementById('effects-grid');
 
-  if (lights.length === 0) {
-    lightsList.innerHTML = `
-      <div class="empty-state">
-        <p>No light devices found</p>
-        <p class="small">Lights will appear here when detected by your system</p>
-      </div>
-    `;
+  if (!light) {
+    statusEl.innerHTML = 'No light detected';
+    grid.innerHTML = '';
     return;
   }
 
-  lightsList.innerHTML = lights.map(light => {
-    const isOn = light.state === '1' || light.state === '3';
-    const typeName = light.type === '1' ? 'Dimmable' :
-      (LIGHT_EFFECTS[light.subtype]?.name || 'Color Light');
-    return `
-      <div class="light-card ${isOn ? 'on' : ''}" data-aux="${light.id}">
-        <div class="light-preview"></div>
-        <div class="light-info">
-          <div class="light-name">${light.label || light.id}</div>
-          <div class="light-type">${typeName}</div>
-        </div>
-        <div class="light-actions">
-          <button class="btn-sm-light" data-toggle="${light.id}">
-            ${isOn ? 'Off' : 'On'}
-          </button>
-          <button class="btn-sm-light" data-settings="${light.id}">
-            Settings
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
+  state.selectedLight = light;
+  const isOn = light.state === '1' || light.state === '3';
+  statusEl.innerHTML = isOn
+    ? '<span class="on-label">● On</span> — Jandy LED WaterColors'
+    : '<span class="off-label">● Off</span> — Tap a color to turn on';
+
+  offBtn.style.display = isOn ? '' : 'none';
+
+  // Render color effect buttons
+  const effects = LIGHT_EFFECTS[light.subtype]?.effects || [];
+  grid.innerHTML = effects.map(eff => `
+    <button class="effect-btn" data-effect="${eff.id}" data-subtype="${light.subtype}">
+      ${eff.name}
+    </button>
+  `).join('');
 }
 
 function renderAuxDevices() {
@@ -387,41 +378,6 @@ function renderAuxDevices() {
   }).join('');
 }
 
-function openLightSettings(auxId) {
-  const device = state.devices.find(d => d.id === auxId);
-  if (!device) return;
-
-  state.selectedLight = device;
-  const panel = document.getElementById('color-panel');
-  const title = document.getElementById('color-panel-title');
-  const brightnessSection = document.getElementById('brightness-section');
-  const effectsSection = document.getElementById('effects-section');
-
-  title.textContent = device.label || device.id;
-  panel.hidden = false;
-
-  if (device.type === '1') {
-    // Dimmable light
-    brightnessSection.hidden = false;
-    effectsSection.hidden = true;
-  } else if (device.type === '2') {
-    // Color light
-    brightnessSection.hidden = true;
-    effectsSection.hidden = false;
-    renderEffects(device);
-  }
-}
-
-function renderEffects(device) {
-  const grid = document.getElementById('effects-grid');
-  const effects = LIGHT_EFFECTS[device.subtype]?.effects || [];
-
-  grid.innerHTML = effects.map(eff => `
-    <button class="effect-btn" data-effect="${eff.id}" data-subtype="${device.subtype}">
-      ${eff.name}
-    </button>
-  `).join('');
-}
 
 // ---- Rendering: OneTouch ----
 function renderOneTouch() {
@@ -659,38 +615,17 @@ function setupEvents() {
     });
   });
 
-  // Light toggles & settings (delegated)
-  document.getElementById('lights-list').addEventListener('click', (e) => {
-    const toggleBtn = e.target.closest('[data-toggle]');
-    if (toggleBtn) {
-      const auxId = toggleBtn.dataset.toggle;
-      const auxNum = auxId.replace('aux_', '');
-      sendCommand(`set_aux_${auxNum}`);
-      toast('Light toggled', 'success');
-      return;
-    }
-
-    const settingsBtn = e.target.closest('[data-settings]');
-    if (settingsBtn) {
-      openLightSettings(settingsBtn.dataset.settings);
-    }
-  });
-
-  // Brightness slider
-  document.getElementById('brightness-range').addEventListener('change', async (e) => {
+  // Light Turn Off button
+  document.getElementById('light-off-btn').addEventListener('click', async () => {
     if (!state.selectedLight) return;
     const auxNum = state.selectedLight.id.replace('aux_', '');
     try {
-      await sendCommand('set_light', {
-        aux: auxNum,
-        light: String(e.target.value),
-        subtype: state.selectedLight.subtype || '0',
-      });
-      toast(`Brightness: ${e.target.value}%`, 'success');
+      await sendCommand(`set_aux_${auxNum}`);
+      toast('Light turned off', 'success');
     } catch (_) {}
   });
 
-  // Color effects (delegated)
+  // Color effects — tap to turn on with that color (delegated)
   document.getElementById('effects-grid').addEventListener('click', async (e) => {
     const btn = e.target.closest('.effect-btn');
     if (!btn || !state.selectedLight) return;
@@ -705,14 +640,8 @@ function setupEvents() {
         light: btn.dataset.effect,
         subtype: btn.dataset.subtype,
       });
-      toast(`Effect: ${btn.textContent.trim()}`, 'success');
+      toast(btn.textContent.trim(), 'success');
     } catch (_) {}
-  });
-
-  // Close color panel
-  document.getElementById('color-close').addEventListener('click', () => {
-    document.getElementById('color-panel').hidden = true;
-    state.selectedLight = null;
   });
 
   // OneTouch buttons (delegated)

@@ -1047,6 +1047,34 @@ select.input optgroup { color: var(--text-dim); }
   font-size: 0.75rem;
 }
 
+.btn-off {
+  background: rgba(255, 82, 82, 0.12);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  color: var(--red);
+}
+
+.btn-off:hover {
+  background: rgba(255, 82, 82, 0.2);
+  border-color: var(--red);
+  filter: none;
+  transform: none;
+}
+
+.light-status {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.light-status .on-label {
+  color: var(--green);
+  font-weight: 500;
+}
+
+.light-status .off-label {
+  color: var(--text-muted);
+}
+
 .btn-icon {
   width: 36px;
   height: 36px;
