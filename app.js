@@ -357,7 +357,23 @@ function renderLights() {
 
 function renderAuxDevices() {
   const auxGrid = document.getElementById('aux-grid');
-  const auxDevices = state.devices.filter(d => d.type === '0');
+  // Only show devices that are on or have a real label (not generic "Aux V*" names)
+  const auxDevices = state.devices
+    .filter(d => d.type === '0')
+    .filter(d => {
+      const isOn = d.state === '1' || d.state === '3';
+      const hasCustomLabel = d.label && !/^Aux V?\d+$/i.test(d.label);
+      return isOn || hasCustomLabel;
+    })
+    // Sort: put Extra Aux right after Aux3
+    .sort((a, b) => {
+      const order = id => {
+        if (id === 'aux_EA') return 3.5; // After aux_3
+        const num = id.replace('aux_', '');
+        return parseInt(num) || 100;
+      };
+      return order(a.id) - order(b.id);
+    });
 
   auxGrid.innerHTML = auxDevices.map(dev => {
     const isOn = dev.state === '1' || dev.state === '3';
