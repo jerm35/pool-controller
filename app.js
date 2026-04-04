@@ -331,16 +331,19 @@ function renderLights() {
 
   state.selectedLight = light;
   const isOn = light.state === '1' || light.state === '3';
+  const activeEffect = localStorage.getItem('pool_light_effect');
+  const activeEffectName = localStorage.getItem('pool_light_effect_name');
+
   statusEl.innerHTML = isOn
-    ? '<span class="on-label">● On</span> — Jandy LED WaterColors'
+    ? `<span class="on-label">● On</span>${activeEffectName ? ' — ' + activeEffectName : ' — Jandy LED WaterColors'}`
     : '<span class="off-label">● Off</span> — Tap a color to turn on';
 
   offBtn.style.display = isOn ? '' : 'none';
 
-  // Render color effect buttons
+  // Render color effect buttons with active state persisted
   const effects = LIGHT_EFFECTS[light.subtype]?.effects || [];
   grid.innerHTML = effects.map(eff => `
-    <button class="effect-btn" data-effect="${eff.id}" data-subtype="${light.subtype}">
+    <button class="effect-btn ${isOn && activeEffect === String(eff.id) ? 'active' : ''}" data-effect="${eff.id}" data-subtype="${light.subtype}">
       ${eff.name}
     </button>
   `).join('');
@@ -623,6 +626,9 @@ function setupEvents() {
     const auxNum = state.selectedLight.id.replace('aux_', '');
     try {
       await sendCommand(`set_aux_${auxNum}`);
+      localStorage.removeItem('pool_light_effect');
+      localStorage.removeItem('pool_light_effect_name');
+      document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
       toast('Light turned off', 'success');
     } catch (_) {}
   });
@@ -635,14 +641,19 @@ function setupEvents() {
     document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
+    const effectId = btn.dataset.effect;
+    const effectName = btn.textContent.trim();
+    localStorage.setItem('pool_light_effect', effectId);
+    localStorage.setItem('pool_light_effect_name', effectName);
+
     const auxNum = state.selectedLight.id.replace('aux_', '');
     try {
       await sendCommand('set_light', {
         aux: auxNum,
-        light: btn.dataset.effect,
+        light: effectId,
         subtype: btn.dataset.subtype,
       });
-      toast(btn.textContent.trim(), 'success');
+      toast(effectName, 'success');
     } catch (_) {}
   });
 
