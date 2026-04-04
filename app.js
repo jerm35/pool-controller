@@ -280,10 +280,7 @@ function renderStatus() {
   const equipGrid = document.getElementById('equip-grid');
   const equipment = [
     { key: 'pool_pump', label: 'Pool Pump', cmd: 'set_pool_pump' },
-    { key: 'spa_pump', label: 'Spa Pump', cmd: 'set_spa_pump' },
     { key: 'pool_heater', label: 'Pool Heat', cmd: 'set_pool_heater' },
-    { key: 'spa_heater', label: 'Spa Heat', cmd: 'set_spa_heater' },
-    { key: 'solar_heater', label: 'Solar Heat', cmd: 'set_solar_heater' },
     { key: 'freeze_protection', label: 'Freeze Protect', cmd: null },
   ].filter(eq => h[eq.key] !== undefined && h[eq.key] !== '');
 
