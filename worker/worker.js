@@ -381,6 +381,20 @@ async function handleWebTouchInit(env, origin) {
 
   await env.POOL_KV.put('webtouch_session', JSON.stringify(wtSession), { expirationTtl: 3600 });
 
+  // Fire the "start" command to wake up the panel connection
+  // The original WebTouch JS does: ioLinkNL(baseURL + masterStart + '&command=1') after 2.5s delay
+  const startUrl = `https://webtouch.iaqualink.net/?actionID=${wtSession.masterStart}&command=1`;
+  const startHeaders = { 'User-Agent': 'Mozilla/5.0' };
+  if (session.idToken) startHeaders['Authorization'] = 'Bearer ' + session.idToken;
+
+  // Must await — CF Workers cancel pending fetches when response is returned
+  try {
+    const startResp = await fetch(startUrl, { headers: startHeaders });
+    wtSession.startStatus = startResp.status;
+  } catch (e) {
+    wtSession.startError = e.message;
+  }
+
   return jsonResponse({ ok: true, webtouch: wtSession }, origin);
   } catch (e) {
     return jsonResponse({ ok: false, error: 'WebTouch init failed: ' + e.message, stack: e.stack }, origin, 500);
@@ -404,7 +418,7 @@ async function handleWebTouchCommand(env, origin, request) {
   // type: 'nav' (1-6), 'key' (digit), 'enter', 'back', 'action' (custom actionID)
 
   // Commands go to the webtouch base with the masterId
-  const wtBase = 'https://webtouch.iaqualink.net';
+  const wtBase = 'https://webtouch.iaqualink.net/';
   let cmdUrl;
   if (type === 'nav') {
     // Navigation: home=1, menu=2, onetouch=3, help=4, back=5, status=6

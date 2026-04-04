@@ -766,124 +766,41 @@ function setupEvents() {
 }
 
 // ---- WebTouch Panel ----
-let wtPolling = false;
-let wtConnected = false;
 
-async function wtConnect() {
+async function wtLaunch() {
   const statusMsg = document.getElementById('panel-status-msg');
   const connectBtn = document.getElementById('panel-connect-btn');
+  const placeholder = document.getElementById('panel-placeholder');
+  const iframe = document.getElementById('panel-iframe');
 
-  statusMsg.textContent = 'Connecting...';
-  statusMsg.className = 'panel-status-msg';
+  statusMsg.innerHTML = '<span>Connecting to panel...</span>';
   connectBtn.disabled = true;
 
   try {
     const resp = await api('/webtouch/init');
     if (!resp.ok) throw new Error(resp.error);
 
-    wtConnected = true;
-    statusMsg.textContent = 'Connected — ' + (resp.webtouch.deviceLabel || 'Panel');
-    statusMsg.className = 'panel-status-msg connected';
-    connectBtn.textContent = 'Reconnect';
-    connectBtn.disabled = false;
+    const wt = resp.webtouch;
+    // Build the WebTouch URL that the iframe will load
+    const wtUrl = `https://webtouch.iaqualink.net/?actionID=${wt.touchLink}&idToken=${wt.idToken}`;
 
-    // Start polling for display updates
-    wtStartPolling();
+    placeholder.hidden = true;
+    iframe.hidden = false;
+    iframe.src = wtUrl;
+
+    statusMsg.innerHTML = '<span>Panel loaded — use the controls inside the panel above</span>';
+    statusMsg.className = 'panel-status-msg connected';
+    connectBtn.textContent = 'Reload Panel';
+    connectBtn.disabled = false;
   } catch (e) {
-    statusMsg.textContent = 'Error: ' + e.message;
+    statusMsg.innerHTML = '<span>Error: ' + e.message + '</span>';
     statusMsg.className = 'panel-status-msg error';
     connectBtn.disabled = false;
   }
 }
 
-async function wtStartPolling() {
-  if (wtPolling) return;
-  wtPolling = true;
-
-  while (wtConnected) {
-    try {
-      const resp = await api('/webtouch/poll');
-      if (resp.ok && resp.lines.length > 0) {
-        wtRenderDisplay(resp.lines);
-      }
-    } catch (_) {
-      // Polling error — will retry
-    }
-
-    // Brief pause between polls
-    await new Promise(r => setTimeout(r, 1000));
-  }
-
-  wtPolling = false;
-}
-
-function wtRenderDisplay(lines) {
-  // Parse printNL arguments: 'text1','text2',... format
-  for (const line of lines) {
-    // Each printNL call contains the full screen state
-    // Format varies: printNL('line1','line2','line3','line4') or similar
-    const parts = [];
-    const strRegex = /'([^']*)'/g;
-    let m;
-    while ((m = strRegex.exec(line)) !== null) {
-      parts.push(m[1]);
-    }
-
-    if (parts.length === 0) continue;
-
-    // Skip OFFLINE messages
-    if (parts[0] === 'OFFLINE') {
-      document.getElementById('pline-0').textContent = 'OFFLINE';
-      document.getElementById('pline-1').textContent = 'Waiting for panel...';
-      document.getElementById('pline-2').textContent = '';
-      document.getElementById('pline-3').textContent = '';
-      continue;
-    }
-
-    // Update display lines
-    for (let i = 0; i < 4; i++) {
-      const el = document.getElementById(`pline-${i}`);
-      if (el && parts[i] !== undefined) {
-        el.textContent = parts[i] || '\u00A0';
-      }
-    }
-  }
-}
-
-async function wtSendCommand(type, value) {
-  if (!wtConnected) {
-    toast('Panel not connected', 'error');
-    return;
-  }
-
-  try {
-    await api('/webtouch/command', {
-      method: 'POST',
-      body: JSON.stringify({ type, value }),
-    });
-  } catch (e) {
-    toast('Command failed', 'error');
-  }
-}
-
 function setupWebTouchEvents() {
-  // Connect button
-  document.getElementById('panel-connect-btn').addEventListener('click', wtConnect);
-
-  // Navigation buttons
-  document.querySelectorAll('[data-wt-nav]').forEach(btn => {
-    btn.addEventListener('click', () => wtSendCommand('nav', btn.dataset.wtNav));
-  });
-
-  // Keypad digits
-  document.querySelectorAll('[data-wt-key]').forEach(btn => {
-    btn.addEventListener('click', () => wtSendCommand('key', btn.dataset.wtKey));
-  });
-
-  // Enter button
-  document.querySelectorAll('[data-wt-type="enter"]').forEach(btn => {
-    btn.addEventListener('click', () => wtSendCommand('enter'));
-  });
+  document.getElementById('panel-connect-btn').addEventListener('click', wtLaunch);
 }
 
 // ---- Auto-refresh ----
