@@ -135,7 +135,8 @@ let state = {
   devices: [],
   onetouch: [],
   schedules: [],
-  poolSetpoint: 80,
+  temp1: 85,
+  temp2: 40,
   selectedLight: null,
 };
 
@@ -296,9 +297,11 @@ function renderStatus() {
     `;
   }).join('');
 
-  // Setpoints from API
-  if (h.pool_set_point) state.poolSetpoint = parseInt(h.pool_set_point);
-  document.getElementById('pool-setpoint').textContent = state.poolSetpoint;
+  // Setpoints from API — temp1 = spa_set_point, temp2 = pool_set_point (API naming)
+  if (h.spa_set_point) state.temp1 = parseInt(h.spa_set_point);
+  if (h.pool_set_point) state.temp2 = parseInt(h.pool_set_point);
+  document.getElementById('temp1-setpoint').textContent = state.temp1;
+  document.getElementById('temp2-setpoint').textContent = state.temp2;
 }
 
 function setRing(id, value, min, max) {
@@ -595,16 +598,18 @@ function setupEvents() {
   // Setpoint controls
   document.querySelectorAll('[data-setpoint]').forEach(btn => {
     btn.addEventListener('click', async () => {
+      const which = btn.dataset.setpoint; // 'temp1' or 'temp2'
       const dir = parseInt(btn.dataset.dir);
-      state.poolSetpoint = Math.max(40, Math.min(104, state.poolSetpoint + dir));
-      document.getElementById('pool-setpoint').textContent = state.poolSetpoint;
+      state[which] = Math.max(40, Math.min(104, state[which] + dir));
+      document.getElementById(`${which}-setpoint`).textContent = state[which];
 
       // Debounce the API call
       clearTimeout(btn._debounce);
       btn._debounce = setTimeout(async () => {
         try {
           await sendCommand('set_temps', {
-            temp2: String(state.poolSetpoint),
+            temp1: String(state.temp1),
+            temp2: String(state.temp2),
           });
           toast('Temperature updated', 'success');
         } catch (_) {}
