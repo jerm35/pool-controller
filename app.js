@@ -140,6 +140,7 @@ let state = {
   temp1: 85,
   temp2: 40,
   selectedLight: null,
+  lightEffect: null,
 };
 
 // ---- API Helpers ----
@@ -185,7 +186,7 @@ async function connect() {
     document.getElementById('system-name').textContent = loginResp.name || loginResp.serial;
 
     // Load all data — don't let individual failures block the dashboard
-    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules()]);
+    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules(), loadLightEffect()]);
     results.forEach((r, i) => {
       if (r.status === 'rejected') console.warn(`Load ${i} failed:`, r.reason);
     });
@@ -233,6 +234,13 @@ async function loadSchedules() {
   if (resp.ok) {
     state.schedules = resp.schedules;
     renderSchedules();
+  }
+}
+
+async function loadLightEffect() {
+  const resp = await api('/pool/light-effect');
+  if (resp.ok) {
+    state.lightEffect = resp.effect;
   }
 }
 
@@ -334,19 +342,18 @@ function renderLights() {
 
   state.selectedLight = light;
   const isOn = light.state === '1' || light.state === '3';
-  const activeEffect = localStorage.getItem('pool_light_effect');
-  const activeEffectName = localStorage.getItem('pool_light_effect_name');
+  const activeEffect = state.lightEffect;
 
   statusEl.innerHTML = isOn
-    ? `<span class="on-label">● On</span>${activeEffectName ? ' — ' + activeEffectName : ' — Jandy LED WaterColors'}`
+    ? `<span class="on-label">● On</span>${activeEffect?.name ? ' — ' + activeEffect.name : ' — Jandy LED WaterColors'}`
     : '<span class="off-label">● Off</span> — Tap a color to turn on';
 
   offBtn.style.display = isOn ? '' : 'none';
 
-  // Render color effect buttons with active state persisted
+  // Render color effect buttons with active state from server
   const effects = LIGHT_EFFECTS[light.subtype]?.effects || [];
   grid.innerHTML = effects.map(eff => `
-    <button class="effect-btn ${isOn && activeEffect === String(eff.id) ? 'active' : ''}" data-effect="${eff.id}" data-subtype="${light.subtype}">
+    <button class="effect-btn ${isOn && activeEffect?.id === String(eff.id) ? 'active' : ''}" data-effect="${eff.id}" data-subtype="${light.subtype}">
       ${eff.name}
     </button>
   `).join('');
@@ -677,8 +684,8 @@ function setupEvents() {
     const auxNum = state.selectedLight.id.replace('aux_', '');
     try {
       await sendCommand(`set_aux_${auxNum}`);
-      localStorage.removeItem('pool_light_effect');
-      localStorage.removeItem('pool_light_effect_name');
+      state.lightEffect = null;
+      api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: null }) });
       document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
       toast('Light turned off', 'success');
     } catch (_) {}
@@ -696,8 +703,8 @@ function setupEvents() {
 
     const effectId = btn.dataset.effect;
     const effectName = btn.textContent.trim();
-    localStorage.setItem('pool_light_effect', effectId);
-    localStorage.setItem('pool_light_effect_name', effectName);
+    state.lightEffect = { id: effectId, name: effectName };
+    api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: state.lightEffect }) });
 
     const auxNum = state.selectedLight.id.replace('aux_', '');
 

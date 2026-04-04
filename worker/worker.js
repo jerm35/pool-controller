@@ -633,6 +633,21 @@ export default {
         return handleDeleteSchedule(env, validOrigin, id);
       }
 
+      // Light effect state (synced across devices)
+      if (path === '/pool/light-effect' && request.method === 'GET') {
+        const effect = await env.POOL_KV.get('light_effect', { type: 'json' });
+        return jsonResponse({ ok: true, effect }, validOrigin);
+      }
+      if (path === '/pool/light-effect' && request.method === 'POST') {
+        const body = await request.json();
+        if (body.effect) {
+          await env.POOL_KV.put('light_effect', JSON.stringify(body.effect));
+        } else {
+          await env.POOL_KV.delete('light_effect');
+        }
+        return jsonResponse({ ok: true }, validOrigin);
+      }
+
       // WebTouch routes
       if (path === '/webtouch/init') {
         return handleWebTouchInit(env, validOrigin);
