@@ -241,6 +241,8 @@ async function loadLightEffect() {
   const resp = await api('/pool/light-effect');
   if (resp.ok) {
     state.lightEffect = resp.effect;
+    // Re-render lights if devices are already loaded
+    if (state.devices.length > 0) renderLights();
   }
 }
 
