@@ -767,13 +767,13 @@ function setupEvents() {
 
 // ---- WebTouch Panel ----
 
+let wtWindow = null;
+
 async function wtLaunch() {
   const statusMsg = document.getElementById('panel-status-msg');
   const connectBtn = document.getElementById('panel-connect-btn');
-  const placeholder = document.getElementById('panel-placeholder');
-  const iframe = document.getElementById('panel-iframe');
 
-  statusMsg.innerHTML = '<span>Connecting to panel...</span>';
+  statusMsg.innerHTML = '<span>Connecting...</span>';
   connectBtn.disabled = true;
 
   try {
@@ -781,20 +781,23 @@ async function wtLaunch() {
     if (!resp.ok) throw new Error(resp.error);
 
     const wt = resp.webtouch;
-    // Build the WebTouch URL that the iframe will load
     const wtUrl = `https://webtouch.iaqualink.net/?actionID=${wt.touchLink}&idToken=${wt.idToken}`;
 
-    placeholder.hidden = true;
-    iframe.hidden = false;
-    iframe.src = wtUrl;
+    // Close existing window if open
+    if (wtWindow && !wtWindow.closed) wtWindow.close();
 
-    statusMsg.innerHTML = '<span>Panel loaded — use the controls inside the panel above</span>';
-    statusMsg.className = 'panel-status-msg connected';
-    connectBtn.textContent = 'Reload Panel';
+    // Open in a popup window sized for the WebTouch interface
+    wtWindow = window.open(wtUrl, 'AqualinkPanel', 'width=860,height=540,toolbar=no,menubar=no,scrollbars=no,status=no');
+
+    if (!wtWindow) {
+      throw new Error('Popup blocked — please allow popups for this site');
+    }
+
+    statusMsg.innerHTML = '<span style="color:var(--green)">Panel opened in new window</span>';
+    connectBtn.textContent = 'Relaunch Panel';
     connectBtn.disabled = false;
   } catch (e) {
-    statusMsg.innerHTML = '<span>Error: ' + e.message + '</span>';
-    statusMsg.className = 'panel-status-msg error';
+    statusMsg.innerHTML = '<span style="color:var(--red)">Error: ' + e.message + '</span>';
     connectBtn.disabled = false;
   }
 }
