@@ -46,6 +46,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 
 html {
   font-size: 16px;
@@ -103,6 +104,15 @@ body {
   align-items: center;
   justify-content: center;
   background: var(--bg-deep);
+  transition: opacity 0.4s ease;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.dashboard[hidden] {
+  display: none;
 }
 
 .overlay-content {
