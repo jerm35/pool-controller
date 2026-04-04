@@ -898,7 +898,27 @@ body {
   background: rgba(255, 82, 82, 0.08);
 }
 
-.btn-delete svg { width: 16px; height: 16px; }
+.btn-delete svg, .btn-edit svg { width: 16px; height: 16px; }
+
+.btn-edit {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-edit:hover {
+  color: var(--cyan);
+  border-color: var(--border-active);
+  background: var(--cyan-glow);
+}
 
 /* === Modal === */
 .modal {

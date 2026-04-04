@@ -453,6 +453,9 @@ function renderSchedules() {
         </div>
         <div class="schedule-actions">
           <button class="schedule-toggle ${sched.enabled ? 'on' : ''}" data-toggle-sched="${sched.id}"></button>
+          <button class="btn-edit" data-edit-sched="${sched.id}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
           <button class="btn-delete" data-delete-sched="${sched.id}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
           </button>
@@ -704,11 +707,17 @@ function setupEvents() {
     btn.addEventListener('click', () => btn.classList.toggle('active'));
   });
 
-  // Schedule toggle & delete (delegated)
+  // Schedule toggle, edit & delete (delegated)
   document.getElementById('schedules-list').addEventListener('click', (e) => {
     const toggleBtn = e.target.closest('[data-toggle-sched]');
     if (toggleBtn) {
       toggleSchedule(toggleBtn.dataset.toggleSched);
+      return;
+    }
+    const editBtn = e.target.closest('[data-edit-sched]');
+    if (editBtn) {
+      const sched = state.schedules.find(s => s.id === editBtn.dataset.editSched);
+      if (sched) openScheduleModal(sched);
       return;
     }
     const deleteBtn = e.target.closest('[data-delete-sched]');
