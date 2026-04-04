@@ -181,10 +181,32 @@ async function handleCommand(env, origin, request) {
     return jsonResponse({ ok: false, error: 'Missing command' }, origin, 400);
   }
 
+  // Handle on/off meta-commands
+  const onOffMap = {
+    pool_pump_on:    { apiCmd: 'set_pool_pump',   key: 'pool_pump',   wantOn: true },
+    pool_pump_off:   { apiCmd: 'set_pool_pump',   key: 'pool_pump',   wantOn: false },
+    pool_heater_on:  { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: true },
+    pool_heater_off: { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: false },
+  };
+
+  if (onOffMap[command]) {
+    const mapped = onOffMap[command];
+    const homeData = await sendCommand(env, 'get_home');
+    const home = {};
+    if (homeData.home_screen) {
+      for (const item of homeData.home_screen) Object.assign(home, item);
+    }
+    const isOn = home[mapped.key] === '1' || home[mapped.key] === '3';
+    if (isOn !== mapped.wantOn) {
+      const data = await sendCommand(env, mapped.apiCmd, params);
+      return jsonResponse({ ok: true, data, toggled: true }, origin);
+    }
+    return jsonResponse({ ok: true, data: null, toggled: false, alreadyCorrect: true }, origin);
+  }
+
   // Whitelist allowed commands
   const allowed = [
-    'set_pool_pump', 'set_spa_pump',
-    'set_pool_heater', 'set_spa_heater', 'set_solar_heater',
+    'set_pool_pump', 'set_pool_heater',
     'set_temps', 'set_light',
     /^set_aux_/,  /^set_onetouch_/,
   ];
@@ -533,7 +555,30 @@ async function handleScheduledEvent(env) {
     if (sched.days && sched.days.length > 0 && !sched.days.includes(currentDay)) continue;
 
     try {
-      await sendCommand(env, sched.command, sched.params || {});
+      // Handle on/off commands by checking current state first
+      const onOffMap = {
+        pool_pump_on:    { apiCmd: 'set_pool_pump',   key: 'pool_pump',   wantOn: true },
+        pool_pump_off:   { apiCmd: 'set_pool_pump',   key: 'pool_pump',   wantOn: false },
+        pool_heater_on:  { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: true },
+        pool_heater_off: { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: false },
+      };
+
+      const mapped = onOffMap[sched.command];
+      if (mapped) {
+        // Get current state
+        const homeData = await sendCommand(env, 'get_home');
+        const home = {};
+        if (homeData.home_screen) {
+          for (const item of homeData.home_screen) Object.assign(home, item);
+        }
+        const isOn = home[mapped.key] === '1' || home[mapped.key] === '3';
+        // Only toggle if state doesn't match desired
+        if (isOn !== mapped.wantOn) {
+          await sendCommand(env, mapped.apiCmd, sched.params || {});
+        }
+      } else {
+        await sendCommand(env, sched.command, sched.params || {});
+      }
       console.log(`Executed schedule: ${sched.label || sched.command} at ${currentTime}`);
     } catch (e) {
       console.error(`Schedule failed: ${sched.id}`, e.message);

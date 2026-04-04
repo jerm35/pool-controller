@@ -118,8 +118,10 @@ const LIGHT_EFFECTS = {
 };
 
 const COMMAND_LABELS = {
-  set_pool_pump: 'Pool Pump',
-  set_pool_heater: 'Pool Heater',
+  pool_pump_on: 'Pump On',
+  pool_pump_off: 'Pump Off',
+  pool_heater_on: 'Heater On',
+  pool_heater_off: 'Heater Off',
   set_onetouch_2: 'OneTouch 2',
   set_onetouch_3: 'OneTouch 3',
   set_onetouch_4: 'OneTouch 4',
