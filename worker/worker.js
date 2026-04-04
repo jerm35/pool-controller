@@ -520,11 +520,11 @@ async function handleScheduledEvent(env) {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'America/Chicago', // Central time — adjust if needed
+    timeZone: 'America/Los_Angeles', // Central time — adjust if needed
   });
   const currentDay = now.toLocaleDateString('en-US', {
     weekday: 'short',
-    timeZone: 'America/Chicago',
+    timeZone: 'America/Los_Angeles',
   }).toLowerCase();
 
   for (const sched of schedules) {
