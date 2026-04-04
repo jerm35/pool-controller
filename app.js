@@ -257,7 +257,8 @@ async function sendCommand(command, params = {}) {
     });
     if (!resp.ok) throw new Error(resp.error);
     // Refresh after brief delay to let controller update
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch()]), 1500);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch()]), 2000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch()]), 5000);
     return resp;
   } catch (e) {
     toast(`Command failed: ${e.message}`, 'error');
