@@ -636,9 +636,11 @@ function setupEvents() {
   });
 
   // Color effects — tap to turn on with that color (delegated)
+  let lightCmdPending = false;
   document.getElementById('effects-grid').addEventListener('click', async (e) => {
     const btn = e.target.closest('.effect-btn');
-    if (!btn || !state.selectedLight) return;
+    if (!btn || !state.selectedLight || lightCmdPending) return;
+    lightCmdPending = true;
 
     document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -649,14 +651,19 @@ function setupEvents() {
     localStorage.setItem('pool_light_effect_name', effectName);
 
     const auxNum = state.selectedLight.id.replace('aux_', '');
+
     try {
+      // Just send set_light — the API handles turning on + setting color
       await sendCommand('set_light', {
         aux: auxNum,
         light: effectId,
         subtype: btn.dataset.subtype,
       });
       toast(effectName, 'success');
+      // Wait before allowing another command — gives controller time to process
+      await new Promise(r => setTimeout(r, 3000));
     } catch (_) {}
+    lightCmdPending = false;
   });
 
   // OneTouch buttons (delegated)
