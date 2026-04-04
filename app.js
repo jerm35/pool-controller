@@ -439,10 +439,33 @@ function renderSchedules() {
   }
 
   empty.hidden = true;
+
+  // Build dynamic command labels using OneTouch names from API
+  const dynamicLabels = { ...COMMAND_LABELS };
+  if (state.onetouch && Array.isArray(state.onetouch)) {
+    for (const item of state.onetouch) {
+      if (typeof item === 'object') {
+        for (const [key, val] of Object.entries(item)) {
+          if (key.startsWith('onetouch_')) {
+            const num = key.replace('onetouch_', '');
+            const props = {};
+            if (Array.isArray(val)) {
+              for (const p of val) Object.assign(props, p);
+            }
+            const label = props.label || props.name;
+            if (label && !/^ONETOUCH \d+$/i.test(label)) {
+              dynamicLabels[`set_onetouch_${num}`] = label;
+            }
+          }
+        }
+      }
+    }
+  }
+
   const cards = state.schedules.map(sched => {
     const daysText = sched.days?.length === 7 ? 'Every day' :
       sched.days?.map(d => DAY_NAMES[d] || d).join(' ') || 'Every day';
-    const cmdLabel = COMMAND_LABELS[sched.command] || sched.command;
+    const cmdLabel = dynamicLabels[sched.command] || sched.command;
 
     return `
       <div class="schedule-card ${sched.enabled ? '' : 'disabled'}" data-sched-id="${sched.id}">
@@ -486,6 +509,28 @@ function openScheduleModal(schedule = null) {
 
   editingScheduleId = schedule?.id || null;
   title.textContent = schedule ? 'Edit Schedule' : 'New Schedule';
+
+  // Update OneTouch option labels with custom names from API
+  if (state.onetouch && Array.isArray(state.onetouch)) {
+    for (const item of state.onetouch) {
+      if (typeof item === 'object') {
+        for (const [key, val] of Object.entries(item)) {
+          if (key.startsWith('onetouch_')) {
+            const num = key.replace('onetouch_', '');
+            const props = {};
+            if (Array.isArray(val)) {
+              for (const p of val) Object.assign(props, p);
+            }
+            const label = props.label || props.name;
+            if (label) {
+              const opt = document.querySelector(`option[value="set_onetouch_${num}"]`);
+              if (opt) opt.textContent = label;
+            }
+          }
+        }
+      }
+    }
+  }
 
   document.getElementById('sched-label').value = schedule?.label || '';
   document.getElementById('sched-time').value = schedule?.time || '';
