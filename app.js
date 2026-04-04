@@ -248,7 +248,7 @@ async function refreshAll() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
   try {
-    await Promise.all([loadHome(), loadDevices(), loadOneTouch()]);
+    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]);
     toast('Refreshed', 'success');
   } catch (e) {
     toast('Refresh failed', 'error');
@@ -265,8 +265,8 @@ async function sendCommand(command, params = {}) {
     });
     if (!resp.ok) throw new Error(resp.error);
     // Refresh after brief delay to let controller update
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch()]), 2000);
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch()]), 5000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]), 2000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]), 5000);
     return resp;
   } catch (e) {
     toast(`Command failed: ${e.message}`, 'error');
@@ -685,7 +685,7 @@ function setupEvents() {
     try {
       await sendCommand(`set_aux_${auxNum}`);
       state.lightEffect = null;
-      api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: null }) });
+      await api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: null }) });
       document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
       toast('Light turned off', 'success');
     } catch (_) {}
@@ -704,7 +704,7 @@ function setupEvents() {
     const effectId = btn.dataset.effect;
     const effectName = btn.textContent.trim();
     state.lightEffect = { id: effectId, name: effectName };
-    api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: state.lightEffect }) });
+    await api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: state.lightEffect }) });
 
     const auxNum = state.selectedLight.id.replace('aux_', '');
 
