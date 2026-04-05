@@ -290,25 +290,51 @@ function renderStatus() {
   // Temperature ring (40-100°F range)
   setRing('pool-ring', parseInt(poolTemp) || 0, 40, 100);
 
-  // Equipment toggles — only show equipment that exists (non-empty values)
+  // Equipment toggles
   const equipGrid = document.getElementById('equip-grid');
-  const equipment = [
-    { key: 'pool_pump', label: 'Pool Pump', cmd: 'set_pool_pump' },
-    { key: 'pool_heater', label: 'Pool Heat', cmd: 'set_pool_heater' },
-    { key: 'freeze_protection', label: 'Freeze Protect', cmd: null },
-  ].filter(eq => h[eq.key] !== undefined && h[eq.key] !== '');
 
-  equipGrid.innerHTML = equipment.map(eq => {
-    const isOn = h[eq.key] === '1' || h[eq.key] === '3';
-    return `
-      <button class="equip-btn ${isOn ? 'on' : ''}"
-              ${eq.cmd ? `data-cmd="${eq.cmd}"` : 'disabled'}
-              title="${eq.label}">
+  // Pool pump
+  const pumpOn = h.pool_pump === '1' || h.pool_pump === '3';
+  // Heater: 0=off, 1=temp1 active, 3=temp2 active
+  const heaterState = h.pool_heater || '0';
+  const temp1Active = heaterState === '1';
+  const temp2Active = heaterState === '3';
+  const freezeOn = h.freeze_protection === '1';
+
+  let html = '';
+
+  // Pool Pump
+  if (h.pool_pump !== undefined && h.pool_pump !== '') {
+    html += `
+      <button class="equip-btn ${pumpOn ? 'on' : ''}" data-cmd="set_pool_pump">
         <div class="equip-dot"></div>
-        <span class="equip-label">${eq.label}</span>
+        <span class="equip-label">Pool Pump</span>
+      </button>`;
+  }
+
+  // Temp 1 button — toggles heater to cycle to Temp 1
+  if (h.pool_heater !== undefined && h.pool_heater !== '') {
+    html += `
+      <button class="equip-btn ${temp1Active ? 'on' : ''}" data-cmd="set_pool_heater" data-heat-target="temp1">
+        <div class="equip-dot"></div>
+        <span class="equip-label">Temp 1 · ${state.temp1 || '--'}°</span>
       </button>
-    `;
-  }).join('');
+      <button class="equip-btn ${temp2Active ? 'on' : ''}" data-cmd="set_pool_heater" data-heat-target="temp2">
+        <div class="equip-dot"></div>
+        <span class="equip-label">Temp 2 · ${state.temp2 || '--'}°</span>
+      </button>`;
+  }
+
+  // Freeze protection
+  if (h.freeze_protection !== undefined && h.freeze_protection !== '') {
+    html += `
+      <button class="equip-btn ${freezeOn ? 'on' : ''}" disabled>
+        <div class="equip-dot"></div>
+        <span class="equip-label">Freeze Protect</span>
+      </button>`;
+  }
+
+  equipGrid.innerHTML = html;
 
   // Setpoints from API — temp1 = spa_set_point, temp2 = pool_set_point (API naming)
   if (h.spa_set_point) state.temp1 = parseInt(h.spa_set_point);
@@ -651,9 +677,57 @@ function setupEvents() {
     const btn = e.target.closest('[data-cmd]');
     if (!btn || btn.classList.contains('sending')) return;
     btn.classList.add('sending');
+
+    const cmd = btn.dataset.cmd;
+    const heatTarget = btn.dataset.heatTarget;
+
     try {
-      await sendCommand(btn.dataset.cmd);
-      toast(`${btn.querySelector('.equip-label').textContent} toggled`, 'success');
+      if (heatTarget) {
+        // Heater cycles: Off(0) → Temp1(1) → Temp2(3) → Off(0)
+        const current = state.home.pool_heater || '0';
+        const isTemp1 = current === '1';
+        const isTemp2 = current === '3';
+
+        if (heatTarget === 'temp1') {
+          if (isTemp1) {
+            // Already on Temp1 — turn off (one toggle: Temp1→Temp2, another: Temp2→Off... actually just toggle to cycle)
+            // Toggle once to go to Temp2, toggle again to go to Off
+            await sendCommand('set_pool_heater');
+            await new Promise(r => setTimeout(r, 2000));
+            await sendCommand('set_pool_heater');
+            toast('Heater Off', 'success');
+          } else if (isTemp2) {
+            // Temp2 → Off → Temp1 = two toggles
+            await sendCommand('set_pool_heater');
+            await new Promise(r => setTimeout(r, 2000));
+            await sendCommand('set_pool_heater');
+            toast('Temp 1 Active', 'success');
+          } else {
+            // Off → Temp1 = one toggle
+            await sendCommand('set_pool_heater');
+            toast('Temp 1 Active', 'success');
+          }
+        } else if (heatTarget === 'temp2') {
+          if (isTemp2) {
+            // Already on Temp2 — turn off (one toggle)
+            await sendCommand('set_pool_heater');
+            toast('Heater Off', 'success');
+          } else if (isTemp1) {
+            // Temp1 → Temp2 = one toggle
+            await sendCommand('set_pool_heater');
+            toast('Temp 2 Active', 'success');
+          } else {
+            // Off → Temp1 → Temp2 = two toggles
+            await sendCommand('set_pool_heater');
+            await new Promise(r => setTimeout(r, 2000));
+            await sendCommand('set_pool_heater');
+            toast('Temp 2 Active', 'success');
+          }
+        }
+      } else {
+        await sendCommand(cmd);
+        toast(`${btn.querySelector('.equip-label').textContent} toggled`, 'success');
+      }
     } catch (_) {}
     btn.classList.remove('sending');
   });
