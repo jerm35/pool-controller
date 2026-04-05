@@ -157,6 +157,7 @@ async function getWebTouchSession(session) {
     serverConnection: wtData.serverConnection,
     label: wtData.label,
     idToken: session.idToken,
+    touchLink,
   };
 }
 
@@ -331,13 +332,58 @@ function handleWebSocket(ws, req) {
 
 // --- HTTP Server ---
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
+  // CORS headers
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   // Health check
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
     return;
   }
+
+  // Proxy the WebTouch page — serves it from our origin so no X-Frame-Options block
+  if (req.url === '/panel') {
+    try {
+      const session = await getSession();
+      const wt = await getWebTouchSession(session);
+      const wtUrl = `https://webtouch.iaqualink.net/?actionID=${wt.touchLink}&idToken=${session.idToken}`;
+      // Redirect to the WebTouch URL (for popup use)
+      res.writeHead(302, { Location: wtUrl });
+      res.end();
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // Get a panel URL for iframe embedding — returns the authenticated URL
+  if (req.url === '/panel-url') {
+    try {
+      const session = await getSession();
+      const wt = await getWebTouchSession(session);
+      const wtUrl = `https://webtouch.iaqualink.net/?actionID=${wt.touchLink}&idToken=${session.idToken}`;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, url: wtUrl }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+    return;
+  }
+
   res.writeHead(404);
   res.end('Not Found');
 });
