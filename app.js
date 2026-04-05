@@ -782,45 +782,110 @@ function setupEvents() {
   });
 }
 
-// ---- WebTouch Panel ----
+// ---- WebTouch Panel (WebSocket via Cloud Run) ----
 
-let wtWindow = null;
+const PANEL_WS_URL = 'wss://pool-panel-proxy-45970316610.us-west1.run.app/ws';
+let panelWs = null;
 
-async function wtLaunch() {
+function wtConnect() {
   const statusMsg = document.getElementById('panel-status-msg');
   const connectBtn = document.getElementById('panel-connect-btn');
 
-  statusMsg.innerHTML = '<span>Connecting...</span>';
+  // Close existing connection
+  if (panelWs) {
+    panelWs.close();
+    panelWs = null;
+  }
+
+  statusMsg.textContent = 'Connecting...';
+  statusMsg.className = 'panel-status-msg';
   connectBtn.disabled = true;
 
-  try {
-    const resp = await api('/webtouch/init');
-    if (!resp.ok) throw new Error(resp.error);
+  panelWs = new WebSocket(PANEL_WS_URL);
 
-    const wt = resp.webtouch;
-    const wtUrl = `https://webtouch.iaqualink.net/?actionID=${wt.touchLink}&idToken=${wt.idToken}`;
+  panelWs.onopen = () => {
+    console.log('[panel] WebSocket connected');
+  };
 
-    // Close existing window if open
-    if (wtWindow && !wtWindow.closed) wtWindow.close();
+  panelWs.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
 
-    // Open in a popup window sized for the WebTouch interface
-    wtWindow = window.open(wtUrl, 'AqualinkPanel', 'width=860,height=540,toolbar=no,menubar=no,scrollbars=no,status=no');
-
-    if (!wtWindow) {
-      throw new Error('Popup blocked — please allow popups for this site');
+    if (msg.type === 'status') {
+      statusMsg.textContent = msg.message;
+    } else if (msg.type === 'connected') {
+      statusMsg.textContent = 'Connected — ' + (msg.label || 'Panel');
+      statusMsg.className = 'panel-status-msg connected';
+      connectBtn.textContent = 'Reconnect';
+      connectBtn.disabled = false;
+    } else if (msg.type === 'display') {
+      wtRenderDisplay(msg.lines);
+    } else if (msg.type === 'error') {
+      statusMsg.textContent = 'Error: ' + msg.message;
+      statusMsg.className = 'panel-status-msg error';
+      connectBtn.disabled = false;
     }
+  };
 
-    statusMsg.innerHTML = '<span style="color:var(--green)">Panel opened in new window</span>';
-    connectBtn.textContent = 'Relaunch Panel';
+  panelWs.onclose = () => {
+    console.log('[panel] WebSocket closed');
+    if (statusMsg.className !== 'panel-status-msg error') {
+      statusMsg.textContent = 'Disconnected';
+      statusMsg.className = 'panel-status-msg';
+    }
+    connectBtn.textContent = 'Connect';
     connectBtn.disabled = false;
-  } catch (e) {
-    statusMsg.innerHTML = '<span style="color:var(--red)">Error: ' + e.message + '</span>';
+    panelWs = null;
+  };
+
+  panelWs.onerror = () => {
+    statusMsg.textContent = 'Connection failed';
+    statusMsg.className = 'panel-status-msg error';
     connectBtn.disabled = false;
+  };
+}
+
+function wtRenderDisplay(lines) {
+  if (!lines || lines.length === 0) return;
+
+  // Handle OFFLINE
+  if (lines[0] === 'OFFLINE') {
+    document.getElementById('pline-0').textContent = 'OFFLINE';
+    document.getElementById('pline-1').textContent = 'Waiting for panel...';
+    document.getElementById('pline-2').textContent = '\u00A0';
+    document.getElementById('pline-3').textContent = '\u00A0';
+    return;
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById(`pline-${i}`);
+    if (el) {
+      el.textContent = (lines[i] !== undefined && lines[i] !== '') ? lines[i] : '\u00A0';
+    }
   }
 }
 
+function wtSendCommand(type, value) {
+  if (!panelWs || panelWs.readyState !== WebSocket.OPEN) {
+    toast('Panel not connected', 'error');
+    return;
+  }
+  panelWs.send(JSON.stringify({ type, value }));
+}
+
 function setupWebTouchEvents() {
-  document.getElementById('panel-connect-btn').addEventListener('click', wtLaunch);
+  document.getElementById('panel-connect-btn').addEventListener('click', wtConnect);
+
+  document.querySelectorAll('[data-wt-nav]').forEach(btn => {
+    btn.addEventListener('click', () => wtSendCommand('nav', btn.dataset.wtNav));
+  });
+
+  document.querySelectorAll('[data-wt-key]').forEach(btn => {
+    btn.addEventListener('click', () => wtSendCommand('key', btn.dataset.wtKey));
+  });
+
+  document.querySelectorAll('[data-wt-type="enter"]').forEach(btn => {
+    btn.addEventListener('click', () => wtSendCommand('enter'));
+  });
 }
 
 // ---- Auto-refresh ----
