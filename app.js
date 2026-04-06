@@ -817,8 +817,21 @@ function setupEvents() {
     if (!btn) return;
     const num = btn.dataset.onetouch;
     try {
-      await sendCommand(`set_onetouch_${num}`);
-      toast(`OneTouch ${num} activated`, 'success');
+      // Use smart speed commands for PUMPHIGH/PUMPLOW buttons
+      if (num === '3') {
+        await sendCommand('pump_high');
+        toast('Pump High', 'success');
+      } else if (num === '4') {
+        await sendCommand('pump_low');
+        toast('Pump Low', 'success');
+      } else {
+        await sendCommand(`set_onetouch_${num}`);
+        // Clear speed if All Off
+        if (num === '1') {
+          await api('/pool/pump-speed', { method: 'POST', body: JSON.stringify({ speed: null }) });
+        }
+        toast(btn.querySelector('.onetouch-label')?.textContent || `OneTouch ${num}`, 'success');
+      }
     } catch (_) {}
   });
 

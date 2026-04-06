@@ -223,6 +223,10 @@ async function handleCommand(env, origin, request) {
     const isOn = home[mapped.key] === '1' || home[mapped.key] === '3';
     if (isOn !== mapped.wantOn) {
       const data = await sendCommand(env, mapped.apiCmd, params);
+      // Clear speed when pump turns off
+      if (command === 'pool_pump_off') {
+        await env.POOL_KV.delete('pump_speed');
+      }
       return jsonResponse({ ok: true, data, toggled: true }, origin);
     }
     return jsonResponse({ ok: true, data: null, toggled: false, alreadyCorrect: true }, origin);
@@ -681,9 +685,18 @@ export default {
       if (path === '/pool/command' && request.method === 'POST') {
         return handleCommand(env, validOrigin, request);
       }
-      if (path === '/pool/pump-speed') {
+      if (path === '/pool/pump-speed' && request.method === 'GET') {
         const speed = await env.POOL_KV.get('pump_speed');
         return jsonResponse({ ok: true, speed }, validOrigin);
+      }
+      if (path === '/pool/pump-speed' && request.method === 'POST') {
+        const body = await request.json();
+        if (body.speed) {
+          await env.POOL_KV.put('pump_speed', body.speed);
+        } else {
+          await env.POOL_KV.delete('pump_speed');
+        }
+        return jsonResponse({ ok: true }, validOrigin);
       }
       if (path === '/pool/schedules' && request.method === 'GET') {
         return handleGetSchedules(env, validOrigin);
