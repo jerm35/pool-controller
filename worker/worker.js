@@ -202,15 +202,9 @@ async function handleCommand(env, origin, request) {
       await sendCommand(env, 'set_pool_pump', {});
       await new Promise(r => setTimeout(r, 5000));
     }
-    // Check if already at desired speed
-    const currentSpeed = await env.POOL_KV.get('pump_speed');
-    const desiredSpeed = command === 'pump_high' ? 'High' : 'Low';
-    if (pumpOn && currentSpeed === desiredSpeed) {
-      return jsonResponse({ ok: true, data: null, alreadyCorrect: true, speed: desiredSpeed }, origin);
-    }
+    // Always fire the speed command — let the controller handle it
     const data = await sendCommand(env, speedMap[command], params);
-    await env.POOL_KV.put('pump_speed', desiredSpeed);
-    return jsonResponse({ ok: true, data, speed: desiredSpeed }, origin);
+    return jsonResponse({ ok: true, data }, origin);
   }
 
   if (onOffMap[command]) {
@@ -615,15 +609,26 @@ async function handleScheduledEvent(env) {
           await new Promise(r => setTimeout(r, 5000));
         }
 
-        // Check if the desired speed is already active — skip if so to avoid toggle-off
-        const currentSpeed = await env.POOL_KV.get('pump_speed');
-        const desiredSpeed = sched.command === 'pump_high' ? 'High' : 'Low';
-        if (pumpOn && currentSpeed === desiredSpeed) {
-          console.log(`[schedule] Already at ${desiredSpeed}, skipping`);
+        // Check if the desired speed is already active via OneTouch state
+        const otData = await sendCommand(env, 'get_onetouch');
+        let alreadyActive = false;
+        if (otData.onetouch_screen) {
+          for (const item of otData.onetouch_screen) {
+            // speedCmd is 'set_onetouch_3' or 'set_onetouch_4'
+            const otKey = speedCmd.replace('set_', '');  // 'onetouch_3' or 'onetouch_4'
+            if (item[otKey]) {
+              const props = {};
+              for (const p of item[otKey]) Object.assign(props, p);
+              if (props.state === '1') alreadyActive = true;
+            }
+          }
+        }
+
+        if (alreadyActive) {
+          console.log(`[schedule] ${speedCmd} already active, skipping`);
         } else {
           await sendCommand(env, speedCmd);
-          await env.POOL_KV.put('pump_speed', desiredSpeed);
-          console.log(`[schedule] Set speed to ${desiredSpeed} via ${speedCmd}`);
+          console.log(`[schedule] Set speed via ${speedCmd}`);
         }
 
       } else {
