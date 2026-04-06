@@ -189,6 +189,23 @@ async function handleCommand(env, origin, request) {
     pool_heater_off: { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: false },
   };
 
+  // Handle compound speed commands: ensure pump on, then set speed
+  const speedMap = { pump_high: 'set_onetouch_3', pump_low: 'set_onetouch_4' };
+  if (speedMap[command]) {
+    const homeData = await sendCommand(env, 'get_home');
+    const home = {};
+    if (homeData.home_screen) {
+      for (const item of homeData.home_screen) Object.assign(home, item);
+    }
+    const pumpOn = home.pool_pump === '1' || home.pool_pump === '3';
+    if (!pumpOn) {
+      await sendCommand(env, 'set_pool_pump', {});
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    const data = await sendCommand(env, speedMap[command], params);
+    return jsonResponse({ ok: true, data }, origin);
+  }
+
   if (onOffMap[command]) {
     const mapped = onOffMap[command];
     const homeData = await sendCommand(env, 'get_home');
@@ -563,21 +580,49 @@ async function handleScheduledEvent(env) {
         pool_heater_off: { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: false },
       };
 
-      const mapped = onOffMap[sched.command];
-      if (mapped) {
+      // Compound commands: pump_high / pump_low — ensure pump on, then set speed
+      const speedMap = {
+        pump_high: 'set_onetouch_3',  // PUMPHIGH
+        pump_low:  'set_onetouch_4',  // PUMPLOW
+      };
+
+      const speedCmd = speedMap[sched.command];
+      if (speedCmd) {
         // Get current state
         const homeData = await sendCommand(env, 'get_home');
         const home = {};
         if (homeData.home_screen) {
           for (const item of homeData.home_screen) Object.assign(home, item);
         }
-        const isOn = home[mapped.key] === '1' || home[mapped.key] === '3';
-        // Only toggle if state doesn't match desired
-        if (isOn !== mapped.wantOn) {
-          await sendCommand(env, mapped.apiCmd, sched.params || {});
+        const pumpOn = home.pool_pump === '1' || home.pool_pump === '3';
+
+        // If pump is off, turn it on first and wait
+        if (!pumpOn) {
+          await sendCommand(env, 'set_pool_pump');
+          console.log(`[schedule] Pump was off, turning on first...`);
+          // Wait for controller to process
+          await new Promise(r => setTimeout(r, 5000));
         }
+
+        // Now fire the OneTouch speed preset
+        await sendCommand(env, speedCmd);
+        console.log(`[schedule] Set speed via ${speedCmd}`);
+
       } else {
-        await sendCommand(env, sched.command, sched.params || {});
+        const mapped = onOffMap[sched.command];
+        if (mapped) {
+          const homeData = await sendCommand(env, 'get_home');
+          const home = {};
+          if (homeData.home_screen) {
+            for (const item of homeData.home_screen) Object.assign(home, item);
+          }
+          const isOn = home[mapped.key] === '1' || home[mapped.key] === '3';
+          if (isOn !== mapped.wantOn) {
+            await sendCommand(env, mapped.apiCmd, sched.params || {});
+          }
+        } else {
+          await sendCommand(env, sched.command, sched.params || {});
+        }
       }
       console.log(`Executed schedule: ${sched.label || sched.command} at ${currentTime}`);
     } catch (e) {

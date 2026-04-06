@@ -118,6 +118,8 @@ const LIGHT_EFFECTS = {
 };
 
 const COMMAND_LABELS = {
+  pump_high: 'Pump High',
+  pump_low: 'Pump Low',
   pool_pump_on: 'Pump On',
   pool_pump_off: 'Pump Off',
   pool_heater_on: 'Heater On',
