@@ -509,7 +509,9 @@ function renderSchedules() {
     }
   }
 
-  const cards = state.schedules.map(sched => {
+  // Sort schedules by time starting at midnight
+  const sorted = [...state.schedules].sort((a, b) => a.time.localeCompare(b.time));
+  const cards = sorted.map(sched => {
     const daysText = sched.days?.length === 7 ? 'Every day' :
       sched.days?.map(d => DAY_NAMES[d] || d).join(' ') || 'Every day';
     const cmdLabel = dynamicLabels[sched.command] || sched.command;

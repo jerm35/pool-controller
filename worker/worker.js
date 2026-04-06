@@ -202,10 +202,15 @@ async function handleCommand(env, origin, request) {
       await sendCommand(env, 'set_pool_pump', {});
       await new Promise(r => setTimeout(r, 5000));
     }
+    // Check if already at desired speed
+    const currentSpeed = await env.POOL_KV.get('pump_speed');
+    const desiredSpeed = command === 'pump_high' ? 'High' : 'Low';
+    if (pumpOn && currentSpeed === desiredSpeed) {
+      return jsonResponse({ ok: true, data: null, alreadyCorrect: true, speed: desiredSpeed }, origin);
+    }
     const data = await sendCommand(env, speedMap[command], params);
-    // Store active speed in KV
-    await env.POOL_KV.put('pump_speed', command === 'pump_high' ? 'High' : 'Low');
-    return jsonResponse({ ok: true, data }, origin);
+    await env.POOL_KV.put('pump_speed', desiredSpeed);
+    return jsonResponse({ ok: true, data, speed: desiredSpeed }, origin);
   }
 
   if (onOffMap[command]) {
@@ -606,10 +611,16 @@ async function handleScheduledEvent(env) {
           await new Promise(r => setTimeout(r, 5000));
         }
 
-        // Now fire the OneTouch speed preset
-        await sendCommand(env, speedCmd);
-        await env.POOL_KV.put('pump_speed', sched.command === 'pump_high' ? 'High' : 'Low');
-        console.log(`[schedule] Set speed via ${speedCmd}`);
+        // Check if the desired speed is already active — skip if so to avoid toggle-off
+        const currentSpeed = await env.POOL_KV.get('pump_speed');
+        const desiredSpeed = sched.command === 'pump_high' ? 'High' : 'Low';
+        if (pumpOn && currentSpeed === desiredSpeed) {
+          console.log(`[schedule] Already at ${desiredSpeed}, skipping`);
+        } else {
+          await sendCommand(env, speedCmd);
+          await env.POOL_KV.put('pump_speed', desiredSpeed);
+          console.log(`[schedule] Set speed to ${desiredSpeed} via ${speedCmd}`);
+        }
 
       } else {
         const mapped = onOffMap[sched.command];
