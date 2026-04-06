@@ -244,6 +244,8 @@ async function loadPumpSpeed() {
   const resp = await api('/pool/pump-speed');
   if (resp.ok) {
     state.pumpSpeed = resp.speed;
+    // Re-render status if home data is already loaded (race condition with parallel loads)
+    if (state.home.status) renderStatus();
   }
 }
 
