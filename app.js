@@ -4,6 +4,7 @@
  */
 
 // ---- Configuration ----
+const APP_VERSION = 'v12';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -186,7 +187,7 @@ async function connect() {
     const loginResp = await api('/auth/login', { method: 'POST' });
     if (!loginResp.ok) throw new Error(loginResp.error || 'Login failed');
 
-    document.getElementById('system-name').textContent = loginResp.name || loginResp.serial;
+    document.getElementById('system-name').textContent = (loginResp.name || loginResp.serial) + ' ' + APP_VERSION;
 
     // Load all data — don't let individual failures block the dashboard
     const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules(), loadLightEffect(), loadPumpSpeed()]);
