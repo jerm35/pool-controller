@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -190,7 +190,7 @@ async function connect() {
     document.getElementById('system-name').textContent = (loginResp.name || loginResp.serial) + ' ' + APP_VERSION;
 
     // Load all data — don't let individual failures block the dashboard
-    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules(), loadLightEffect(), loadPumpSpeed()]);
+    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules(), loadLightEffect()]);
     results.forEach((r, i) => {
       if (r.status === 'rejected') console.warn(`Load ${i} failed:`, r.reason);
     });
@@ -230,6 +230,8 @@ async function loadOneTouch() {
   if (resp.ok) {
     state.onetouch = resp.data || [];
     renderOneTouch();
+    derivePumpSpeed();
+    if (state.home.status) renderStatus();
   }
 }
 
@@ -241,13 +243,27 @@ async function loadSchedules() {
   }
 }
 
-async function loadPumpSpeed() {
-  const resp = await api('/pool/pump-speed');
-  if (resp.ok) {
-    state.pumpSpeed = resp.speed;
-    // Re-render status if home data is already loaded (race condition with parallel loads)
-    if (state.home.status) renderStatus();
+function derivePumpSpeed() {
+  // Derive speed from OneTouch button states — no KV dependency
+  if (state.onetouch && Array.isArray(state.onetouch)) {
+    for (const item of state.onetouch) {
+      if (typeof item === 'object') {
+        for (const [key, val] of Object.entries(item)) {
+          if (key === 'onetouch_3' || key === 'onetouch_4') {
+            const props = {};
+            if (Array.isArray(val)) {
+              for (const p of val) Object.assign(props, p);
+            }
+            if (props.state === '1') {
+              state.pumpSpeed = key === 'onetouch_3' ? 'High' : 'Low';
+              return;
+            }
+          }
+        }
+      }
+    }
   }
+  state.pumpSpeed = null;
 }
 
 async function loadLightEffect() {
@@ -263,7 +279,7 @@ async function refreshAll() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
   try {
-    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadPumpSpeed()]);
+    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]);
     toast('Refreshed', 'success');
   } catch (e) {
     toast('Refresh failed', 'error');
@@ -280,8 +296,8 @@ async function sendCommand(command, params = {}) {
     });
     if (!resp.ok) throw new Error(resp.error);
     // Refresh after brief delay to let controller update
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadPumpSpeed()]), 2000);
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadPumpSpeed()]), 5000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]), 2000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]), 5000);
     return resp;
   } catch (e) {
     toast(`Command failed: ${e.message}`, 'error');
