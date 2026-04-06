@@ -203,6 +203,8 @@ async function handleCommand(env, origin, request) {
       await new Promise(r => setTimeout(r, 5000));
     }
     const data = await sendCommand(env, speedMap[command], params);
+    // Store active speed in KV
+    await env.POOL_KV.put('pump_speed', command === 'pump_high' ? 'High' : 'Low');
     return jsonResponse({ ok: true, data }, origin);
   }
 
@@ -606,6 +608,7 @@ async function handleScheduledEvent(env) {
 
         // Now fire the OneTouch speed preset
         await sendCommand(env, speedCmd);
+        await env.POOL_KV.put('pump_speed', sched.command === 'pump_high' ? 'High' : 'Low');
         console.log(`[schedule] Set speed via ${speedCmd}`);
 
       } else {
@@ -666,6 +669,10 @@ export default {
       }
       if (path === '/pool/command' && request.method === 'POST') {
         return handleCommand(env, validOrigin, request);
+      }
+      if (path === '/pool/pump-speed') {
+        const speed = await env.POOL_KV.get('pump_speed');
+        return jsonResponse({ ok: true, speed }, validOrigin);
       }
       if (path === '/pool/schedules' && request.method === 'GET') {
         return handleGetSchedules(env, validOrigin);

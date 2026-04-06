@@ -143,6 +143,7 @@ let state = {
   temp2: 40,
   selectedLight: null,
   lightEffect: null,
+  pumpSpeed: null,
 };
 
 // ---- API Helpers ----
@@ -188,7 +189,7 @@ async function connect() {
     document.getElementById('system-name').textContent = loginResp.name || loginResp.serial;
 
     // Load all data — don't let individual failures block the dashboard
-    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules(), loadLightEffect()]);
+    const results = await Promise.allSettled([loadHome(), loadDevices(), loadOneTouch(), loadSchedules(), loadLightEffect(), loadPumpSpeed()]);
     results.forEach((r, i) => {
       if (r.status === 'rejected') console.warn(`Load ${i} failed:`, r.reason);
     });
@@ -239,6 +240,13 @@ async function loadSchedules() {
   }
 }
 
+async function loadPumpSpeed() {
+  const resp = await api('/pool/pump-speed');
+  if (resp.ok) {
+    state.pumpSpeed = resp.speed;
+  }
+}
+
 async function loadLightEffect() {
   const resp = await api('/pool/light-effect');
   if (resp.ok) {
@@ -252,7 +260,7 @@ async function refreshAll() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
   try {
-    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]);
+    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadPumpSpeed()]);
     toast('Refreshed', 'success');
   } catch (e) {
     toast('Refresh failed', 'error');
@@ -269,8 +277,8 @@ async function sendCommand(command, params = {}) {
     });
     if (!resp.ok) throw new Error(resp.error);
     // Refresh after brief delay to let controller update
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]), 2000);
-    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]), 5000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadPumpSpeed()]), 2000);
+    setTimeout(() => Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadPumpSpeed()]), 5000);
     return resp;
   } catch (e) {
     toast(`Command failed: ${e.message}`, 'error');
@@ -305,12 +313,13 @@ function renderStatus() {
 
   let html = '';
 
-  // Pool Pump
+  // Pool Pump — show speed if known
   if (h.pool_pump !== undefined && h.pool_pump !== '') {
+    const speedLabel = pumpOn && state.pumpSpeed ? ` · ${state.pumpSpeed}` : '';
     html += `
       <button class="equip-btn ${pumpOn ? 'on' : ''}" data-cmd="set_pool_pump">
         <div class="equip-dot"></div>
-        <span class="equip-label">Pool Pump</span>
+        <span class="equip-label">Pool Pump${speedLabel}</span>
       </button>`;
   }
 
