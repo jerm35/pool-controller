@@ -122,6 +122,24 @@ async function sendCommand(env, command, extraParams = {}) {
   return resp.json();
 }
 
+// Returns map of { onetouch_1: '0'|'1', onetouch_2: ..., ... }
+async function readOneTouchStates(env) {
+  const data = await sendCommand(env, 'get_onetouch');
+  const states = {};
+  const arr = data.onetouch_screen || [];
+  for (const item of arr) {
+    if (typeof item !== 'object') continue;
+    for (const [key, val] of Object.entries(item)) {
+      if (key.startsWith('onetouch_')) {
+        const props = {};
+        if (Array.isArray(val)) for (const p of val) Object.assign(props, p);
+        states[key] = props.state ?? '0';
+      }
+    }
+  }
+  return states;
+}
+
 // --- Route Handlers ---
 
 async function handleLogin(env, origin) {
@@ -189,9 +207,15 @@ async function handleCommand(env, origin, request) {
     pool_heater_off: { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: false },
   };
 
-  // Handle compound speed commands: ensure pump on, then set speed
-  const speedMap = { pump_high: 'set_onetouch_3', pump_low: 'set_onetouch_4' };
+  // Handle compound speed commands: ensure pump on, deactivate other speed, then set new speed
+  const speedMap = {
+    pump_high: { activate: 'set_onetouch_3', deactivate: 'set_onetouch_4', activeKey: 'onetouch_3', otherKey: 'onetouch_4' },
+    pump_low:  { activate: 'set_onetouch_4', deactivate: 'set_onetouch_3', activeKey: 'onetouch_4', otherKey: 'onetouch_3' },
+  };
   if (speedMap[command]) {
+    const m = speedMap[command];
+
+    // Ensure pump is on
     const homeData = await sendCommand(env, 'get_home');
     const home = {};
     if (homeData.home_screen) {
@@ -202,9 +226,28 @@ async function handleCommand(env, origin, request) {
       await sendCommand(env, 'set_pool_pump', {});
       await new Promise(r => setTimeout(r, 5000));
     }
-    // Always fire the speed command — let the controller handle it
-    const data = await sendCommand(env, speedMap[command], params);
-    return jsonResponse({ ok: true, data }, origin);
+
+    // Read current OneTouch state to avoid double-active conflict
+    const otState = await readOneTouchStates(env);
+    const desiredAlreadyActive = otState[m.activeKey] === '1';
+    const otherActive = otState[m.otherKey] === '1';
+
+    if (desiredAlreadyActive && !otherActive) {
+      return jsonResponse({ ok: true, alreadyCorrect: true }, origin);
+    }
+
+    // If the OTHER speed preset is active, deactivate it first
+    if (otherActive) {
+      await sendCommand(env, m.deactivate, {});
+      await new Promise(r => setTimeout(r, 2500));
+    }
+
+    // Now activate the desired speed (only if not already active)
+    if (!desiredAlreadyActive) {
+      const data = await sendCommand(env, m.activate, params);
+      return jsonResponse({ ok: true, data }, origin);
+    }
+    return jsonResponse({ ok: true, deactivatedOther: true }, origin);
   }
 
   if (onOffMap[command]) {
@@ -585,50 +628,46 @@ async function handleScheduledEvent(env) {
         pool_heater_off: { apiCmd: 'set_pool_heater', key: 'pool_heater', wantOn: false },
       };
 
-      // Compound commands: pump_high / pump_low — ensure pump on, then set speed
-      const speedMap = {
-        pump_high: 'set_onetouch_3',  // PUMPHIGH
-        pump_low:  'set_onetouch_4',  // PUMPLOW
+      // Compound commands: pump_high / pump_low — ensure pump on, deactivate other speed, then set new speed
+      const cronSpeedMap = {
+        pump_high: { activate: 'set_onetouch_3', deactivate: 'set_onetouch_4', activeKey: 'onetouch_3', otherKey: 'onetouch_4' },
+        pump_low:  { activate: 'set_onetouch_4', deactivate: 'set_onetouch_3', activeKey: 'onetouch_4', otherKey: 'onetouch_3' },
       };
 
-      const speedCmd = speedMap[sched.command];
-      if (speedCmd) {
-        // Get current state
+      const speedM = cronSpeedMap[sched.command];
+      if (speedM) {
+        // Ensure pump is on
         const homeData = await sendCommand(env, 'get_home');
         const home = {};
         if (homeData.home_screen) {
           for (const item of homeData.home_screen) Object.assign(home, item);
         }
         const pumpOn = home.pool_pump === '1' || home.pool_pump === '3';
-
-        // If pump is off, turn it on first and wait
         if (!pumpOn) {
           await sendCommand(env, 'set_pool_pump');
           console.log(`[schedule] Pump was off, turning on first...`);
-          // Wait for controller to process
           await new Promise(r => setTimeout(r, 5000));
         }
 
-        // Check if the desired speed is already active via OneTouch state
-        const otData = await sendCommand(env, 'get_onetouch');
-        let alreadyActive = false;
-        if (otData.onetouch_screen) {
-          for (const item of otData.onetouch_screen) {
-            // speedCmd is 'set_onetouch_3' or 'set_onetouch_4'
-            const otKey = speedCmd.replace('set_', '');  // 'onetouch_3' or 'onetouch_4'
-            if (item[otKey]) {
-              const props = {};
-              for (const p of item[otKey]) Object.assign(props, p);
-              if (props.state === '1') alreadyActive = true;
-            }
-          }
-        }
+        // Read OneTouch states to handle conflict
+        const otState = await readOneTouchStates(env);
+        const desiredAlreadyActive = otState[speedM.activeKey] === '1';
+        const otherActive = otState[speedM.otherKey] === '1';
 
-        if (alreadyActive) {
-          console.log(`[schedule] ${speedCmd} already active, skipping`);
+        if (desiredAlreadyActive && !otherActive) {
+          console.log(`[schedule] ${speedM.activate} already active, skipping`);
         } else {
-          await sendCommand(env, speedCmd);
-          console.log(`[schedule] Set speed via ${speedCmd}`);
+          // Deactivate the OTHER speed preset first if it's active
+          if (otherActive) {
+            await sendCommand(env, speedM.deactivate);
+            console.log(`[schedule] Deactivated ${speedM.deactivate} first`);
+            await new Promise(r => setTimeout(r, 2500));
+          }
+          // Activate the desired speed if not already active
+          if (!desiredAlreadyActive) {
+            await sendCommand(env, speedM.activate);
+            console.log(`[schedule] Activated ${speedM.activate}`);
+          }
         }
 
       } else {
