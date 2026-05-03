@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -726,13 +726,37 @@ function setupEvents() {
     try {
       const heatChannel = btn.dataset.heatChannel;
       if (heatChannel === 'spa') {
-        // UI Temp 1 = spa_heater field
-        await sendCommand('set_spa_heater');
-        toast(temp1ActiveBefore() ? 'Temp 1 Off' : 'Temp 1 On', 'success');
+        // UI Temp 1 — mutually exclusive with Temp 2
+        const t1On = temp1ActiveBefore();
+        const t2On = temp2ActiveBefore();
+        if (t1On) {
+          // Just turn off
+          await sendCommand('set_spa_heater');
+          toast('Temp 1 Off', 'success');
+        } else {
+          // Turn on Temp 1, turn off Temp 2 if currently on
+          if (t2On) {
+            await sendCommand('set_pool_heater');
+            await new Promise(r => setTimeout(r, 1500));
+          }
+          await sendCommand('set_spa_heater');
+          toast('Temp 1 On', 'success');
+        }
       } else if (heatChannel === 'pool') {
-        // UI Temp 2 = pool_heater field
-        await sendCommand('set_pool_heater');
-        toast(temp2ActiveBefore() ? 'Temp 2 Off' : 'Temp 2 On', 'success');
+        // UI Temp 2 — mutually exclusive with Temp 1
+        const t1On = temp1ActiveBefore();
+        const t2On = temp2ActiveBefore();
+        if (t2On) {
+          await sendCommand('set_pool_heater');
+          toast('Temp 2 Off', 'success');
+        } else {
+          if (t1On) {
+            await sendCommand('set_spa_heater');
+            await new Promise(r => setTimeout(r, 1500));
+          }
+          await sendCommand('set_pool_heater');
+          toast('Temp 2 On', 'success');
+        }
       } else {
         await sendCommand(btn.dataset.cmd);
         toast(`${btn.querySelector('.equip-label').textContent} toggled`, 'success');
