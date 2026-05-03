@@ -14,7 +14,7 @@ A custom web dashboard for controlling a home swimming pool via the **Jandy iAqu
 - **Controller:** Jandy AqualinkRS (model RS-4, pool only — no spa)
 - **Pump:** Variable speed pump controlled via OneTouch presets (not direct RPM)
 - **Light:** Jandy LED WaterColors (1 pool light, color type, subtype 4, 14 effects)
-- **Heater:** Pool heater with two switchable setpoints (Temp 1 = 85°F, Temp 2 = 40°F)
+- **Heater:** Jandy JXi 400NK gas heater in Remote TSTAT mode, two switchable setpoints (Temp 1 / Temp 2). Single-heater system — only one channel can fire at a time.
 - **Auxiliaries:** aux_1 (Pool Light), aux_2 (Heater), aux_3, aux_EA (Extra Aux) — plus many unused aux slots
 - **Location:** Vancouver, WA — Pacific timezone (America/Los_Angeles)
 
@@ -162,9 +162,31 @@ The WebTouch protocol uses a complex 3000+ line GUI rendering system with numeri
 
 **get_onetouch** returns similar nested structure with state/label per button.
 
-### Heater Behavior (Pool-Only System)
+### Heater Behavior (Pool-Only System with Single Heater)
 
-On a pool-only AqualinkRS, the API's `spa_set_point` and `pool_set_point` map to **Temp 1** and **Temp 2** (two switchable heat targets), not spa vs pool. `pool_heater` values: `"0"` = off, `"1"` = Temp 1 active, `"3"` = Temp 2 active.
+The API uses legacy `spa_*` / `pool_*` field names but iAqualink's UI labels them **opposite** of what the field names suggest. Verified via direct comparison with the official iAqualink mobile app:
+
+| iAqualink UI label | API setpoint field | API heater state field | Toggle command |
+|--------------------|--------------------|--------------------------|-----------------|
+| **Temp 1** | `spa_set_point` | `spa_heater` | `set_spa_heater` |
+| **Temp 2** | `pool_set_point` | `pool_heater` | `set_pool_heater` |
+
+**`set_temps` parameter mapping:** `temp1` param writes `spa_set_point`, `temp2` param writes `pool_set_point` (consistent with the UI labels).
+
+**Heater state values:**
+- `"0"` = off / disabled
+- `"1"` = enabled and **actively calling for heat** (heater firing)
+- `"3"` = enabled but in standby (not currently calling)
+
+**Single-heater system constraint (this system):**
+The Jandy JXi 400NK is a single physical heater. Only **one** of `spa_heater` / `pool_heater` can be actively calling for heat at a time. The controller treats them as alternative targets, not simultaneous. Our app implements this as **mutually exclusive toggles** — tapping one auto-disables the other.
+
+**Heater hardware (Jandy JXi specifics):**
+- Must be in "REMOTE TSTAT ENABLED" mode for the controller to drive it
+- The heater has its own local setpoint that acts as a ceiling — if the controller calls for heat to 90°F but the heater's local setpoint is 85°F, the heater stops at 85°F
+- Set the heater's local setpoint **higher than** any controller setpoint you plan to use
+
+**Common gotcha:** Our app showing the 🔥 flame indicator means the controller is calling for heat (state=`1`). It does **not** guarantee the physical heater is actually firing — that depends on the heater's mode, local setpoint, and wiring.
 
 ### Pump Speed
 
