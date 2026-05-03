@@ -228,7 +228,7 @@ async function handleCommand(env, origin, request) {
 
   // Whitelist allowed commands
   const allowed = [
-    'set_pool_pump', 'set_pool_heater',
+    'set_pool_pump', 'set_pool_heater', 'set_spa_heater',
     'set_temps', 'set_light',
     /^set_aux_/,  /^set_onetouch_/,
   ];

@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -324,10 +324,13 @@ function renderStatus() {
 
   // Pool pump
   const pumpOn = h.pool_pump === '1' || h.pool_pump === '3';
-  // Heater: 0=off, 1=spa_set_point active (UI Temp 2), 3=pool_set_point active (UI Temp 1)
-  const heaterState = h.pool_heater || '0';
-  const temp1Active = heaterState === '3';  // UI Temp 1 = pool_set_point
-  const temp2Active = heaterState === '1';  // UI Temp 2 = spa_set_point
+  // Two independent heater channels:
+  //   pool_heater → Temp 1 (pool_set_point) — values: 0=off, 1=enabled idle, 3=heating
+  //   spa_heater  → Temp 2 (spa_set_point) — same value scheme
+  const temp1Active = h.pool_heater === '1' || h.pool_heater === '3';
+  const temp2Active = h.spa_heater === '1' || h.spa_heater === '3';
+  const temp1Heating = h.pool_heater === '3';
+  const temp2Heating = h.spa_heater === '3';
   const freezeOn = h.freeze_protection === '1';
 
   let html = '';
@@ -342,16 +345,21 @@ function renderStatus() {
       </button>`;
   }
 
-  // Temp 1 button — toggles heater to cycle to Temp 1
+  // Temp 1 (pool_heater) and Temp 2 (spa_heater) — independent toggles
   if (h.pool_heater !== undefined && h.pool_heater !== '') {
+    const t1Suffix = temp1Heating ? ' 🔥' : '';
     html += `
-      <button class="equip-btn ${temp1Active ? 'on' : ''}" data-cmd="set_pool_heater" data-heat-target="temp1">
+      <button class="equip-btn ${temp1Active ? 'on' : ''}" data-heat-channel="pool">
         <div class="equip-dot"></div>
-        <span class="equip-label">Temp 1 · ${state.temp1 || '--'}°</span>
-      </button>
-      <button class="equip-btn ${temp2Active ? 'on' : ''}" data-cmd="set_pool_heater" data-heat-target="temp2">
+        <span class="equip-label">Temp 1 · ${state.temp1 || '--'}°${t1Suffix}</span>
+      </button>`;
+  }
+  if (h.spa_heater !== undefined && h.spa_heater !== '') {
+    const t2Suffix = temp2Heating ? ' 🔥' : '';
+    html += `
+      <button class="equip-btn ${temp2Active ? 'on' : ''}" data-heat-channel="spa">
         <div class="equip-dot"></div>
-        <span class="equip-label">Temp 2 · ${state.temp2 || '--'}°</span>
+        <span class="equip-label">Temp 2 · ${state.temp2 || '--'}°${t2Suffix}</span>
       </button>`;
   }
 
@@ -709,67 +717,34 @@ function setupEvents() {
 
   // Equipment toggles (delegated)
   document.getElementById('equip-grid').addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-cmd]');
+    const btn = e.target.closest('[data-cmd], [data-heat-channel]');
     if (!btn || btn.classList.contains('sending')) return;
     btn.classList.add('sending');
 
-    const cmd = btn.dataset.cmd;
-    const heatTarget = btn.dataset.heatTarget;
-
     try {
-      if (heatTarget) {
-        // Heater cycles: Off(0) → state=1 (UI Temp 2) → state=3 (UI Temp 1) → Off(0)
-        // UI Temp 1 = pool_set_point (the pool heat target) = state 3
-        // UI Temp 2 = spa_set_point (secondary) = state 1
-        const current = state.home.pool_heater || '0';
-        const atUiTemp1 = current === '3';  // pool_set_point active
-        const atUiTemp2 = current === '1';  // spa_set_point active
-
-        const toggleNTimes = async (n) => {
-          for (let i = 0; i < n; i++) {
-            if (i > 0) await new Promise(r => setTimeout(r, 2000));
-            await sendCommand('set_pool_heater');
-          }
-        };
-
-        if (heatTarget === 'temp1') {
-          // Want UI Temp 1 (state=3, pool_set_point active)
-          if (atUiTemp1) {
-            // Already on Temp 1 → cycle to Off (one toggle: state 3 → Off)
-            await toggleNTimes(1);
-            toast('Heater Off', 'success');
-          } else if (atUiTemp2) {
-            // state=1 → state=3 (one toggle)
-            await toggleNTimes(1);
-            toast('Temp 1 Active (Pool)', 'success');
-          } else {
-            // Off → state=1 → state=3 (two toggles)
-            await toggleNTimes(2);
-            toast('Temp 1 Active (Pool)', 'success');
-          }
-        } else if (heatTarget === 'temp2') {
-          // Want UI Temp 2 (state=1, spa_set_point active)
-          if (atUiTemp2) {
-            // Already on Temp 2 → cycle to Temp 1, then to Off (two toggles)
-            await toggleNTimes(2);
-            toast('Heater Off', 'success');
-          } else if (atUiTemp1) {
-            // state=3 → Off → state=1 (two toggles)
-            await toggleNTimes(2);
-            toast('Temp 2 Active', 'success');
-          } else {
-            // Off → state=1 (one toggle)
-            await toggleNTimes(1);
-            toast('Temp 2 Active', 'success');
-          }
-        }
+      const heatChannel = btn.dataset.heatChannel;
+      if (heatChannel === 'pool') {
+        // Toggle Temp 1 (pool_heater field) — independent on/off
+        await sendCommand('set_pool_heater');
+        toast(temp1ActiveBefore() ? 'Temp 1 Off' : 'Temp 1 On', 'success');
+      } else if (heatChannel === 'spa') {
+        // Toggle Temp 2 (spa_heater field) — independent on/off
+        await sendCommand('set_spa_heater');
+        toast(temp2ActiveBefore() ? 'Temp 2 Off' : 'Temp 2 On', 'success');
       } else {
-        await sendCommand(cmd);
+        await sendCommand(btn.dataset.cmd);
         toast(`${btn.querySelector('.equip-label').textContent} toggled`, 'success');
       }
     } catch (_) {}
     btn.classList.remove('sending');
   });
+
+  function temp1ActiveBefore() {
+    return state.home.pool_heater === '1' || state.home.pool_heater === '3';
+  }
+  function temp2ActiveBefore() {
+    return state.home.spa_heater === '1' || state.home.spa_heater === '3';
+  }
 
   // Setpoint controls
   // Single shared debounce timer so + and - on different buttons coalesce
