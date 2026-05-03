@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -324,13 +324,14 @@ function renderStatus() {
 
   // Pool pump
   const pumpOn = h.pool_pump === '1' || h.pool_pump === '3';
-  // Two independent heater channels:
-  //   pool_heater → Temp 1 (pool_set_point) — values: 0=off, 1=enabled idle, 3=heating
-  //   spa_heater  → Temp 2 (spa_set_point) — same value scheme
-  const temp1Active = h.pool_heater === '1' || h.pool_heater === '3';
-  const temp2Active = h.spa_heater === '1' || h.spa_heater === '3';
-  const temp1Heating = h.pool_heater === '3';
-  const temp2Heating = h.spa_heater === '3';
+  // iAqualink labels are inverted from API field names (legacy AqualinkRS naming):
+  //   UI Temp 1 ← spa_set_point + spa_heater field
+  //   UI Temp 2 ← pool_set_point + pool_heater field
+  // Heater state values: 0=off, 1=heating actively, 3=enabled standby
+  const temp1Active = h.spa_heater === '1' || h.spa_heater === '3';
+  const temp2Active = h.pool_heater === '1' || h.pool_heater === '3';
+  const temp1Heating = h.spa_heater === '1';
+  const temp2Heating = h.pool_heater === '1';
   const freezeOn = h.freeze_protection === '1';
 
   let html = '';
@@ -345,19 +346,19 @@ function renderStatus() {
       </button>`;
   }
 
-  // Temp 1 (pool_heater) and Temp 2 (spa_heater) — independent toggles
-  if (h.pool_heater !== undefined && h.pool_heater !== '') {
+  // Temp 1 = spa_heater channel, Temp 2 = pool_heater channel — independent toggles
+  if (h.spa_heater !== undefined && h.spa_heater !== '') {
     const t1Suffix = temp1Heating ? ' 🔥' : '';
     html += `
-      <button class="equip-btn ${temp1Active ? 'on' : ''}" data-heat-channel="pool">
+      <button class="equip-btn ${temp1Active ? 'on' : ''}" data-heat-channel="spa">
         <div class="equip-dot"></div>
         <span class="equip-label">Temp 1 · ${state.temp1 || '--'}°${t1Suffix}</span>
       </button>`;
   }
-  if (h.spa_heater !== undefined && h.spa_heater !== '') {
+  if (h.pool_heater !== undefined && h.pool_heater !== '') {
     const t2Suffix = temp2Heating ? ' 🔥' : '';
     html += `
-      <button class="equip-btn ${temp2Active ? 'on' : ''}" data-heat-channel="spa">
+      <button class="equip-btn ${temp2Active ? 'on' : ''}" data-heat-channel="pool">
         <div class="equip-dot"></div>
         <span class="equip-label">Temp 2 · ${state.temp2 || '--'}°${t2Suffix}</span>
       </button>`;
@@ -374,11 +375,12 @@ function renderStatus() {
 
   equipGrid.innerHTML = html;
 
-  // Setpoints from API — UI label "Temp 1" = pool_set_point (the primary pool heat target)
-  // The API's set_temps params are inverted: temp1 param writes spa_set_point, temp2 param writes pool_set_point
+  // Setpoints from API — iAqualink labels them inverted vs API field names:
+  //   UI Temp 1 ← spa_set_point (set with temp1 API param)
+  //   UI Temp 2 ← pool_set_point (set with temp2 API param)
   if (!state.setpointEditing) {
-    if (h.pool_set_point) state.temp1 = parseInt(h.pool_set_point);  // Pool primary
-    if (h.spa_set_point) state.temp2 = parseInt(h.spa_set_point);    // Secondary
+    if (h.spa_set_point) state.temp1 = parseInt(h.spa_set_point);
+    if (h.pool_set_point) state.temp2 = parseInt(h.pool_set_point);
   }
   document.getElementById('temp1-setpoint').textContent = state.temp1;
   document.getElementById('temp2-setpoint').textContent = state.temp2;
@@ -723,13 +725,13 @@ function setupEvents() {
 
     try {
       const heatChannel = btn.dataset.heatChannel;
-      if (heatChannel === 'pool') {
-        // Toggle Temp 1 (pool_heater field) — independent on/off
-        await sendCommand('set_pool_heater');
-        toast(temp1ActiveBefore() ? 'Temp 1 Off' : 'Temp 1 On', 'success');
-      } else if (heatChannel === 'spa') {
-        // Toggle Temp 2 (spa_heater field) — independent on/off
+      if (heatChannel === 'spa') {
+        // UI Temp 1 = spa_heater field
         await sendCommand('set_spa_heater');
+        toast(temp1ActiveBefore() ? 'Temp 1 Off' : 'Temp 1 On', 'success');
+      } else if (heatChannel === 'pool') {
+        // UI Temp 2 = pool_heater field
+        await sendCommand('set_pool_heater');
         toast(temp2ActiveBefore() ? 'Temp 2 Off' : 'Temp 2 On', 'success');
       } else {
         await sendCommand(btn.dataset.cmd);
@@ -740,10 +742,10 @@ function setupEvents() {
   });
 
   function temp1ActiveBefore() {
-    return state.home.pool_heater === '1' || state.home.pool_heater === '3';
+    return state.home.spa_heater === '1' || state.home.spa_heater === '3';
   }
   function temp2ActiveBefore() {
-    return state.home.spa_heater === '1' || state.home.spa_heater === '3';
+    return state.home.pool_heater === '1' || state.home.pool_heater === '3';
   }
 
   // Setpoint controls
@@ -762,14 +764,14 @@ function setupEvents() {
       clearTimeout(setpointDebounce);
       setpointDebounce = setTimeout(async () => {
         try {
-          // API param mapping: temp1 → spa_set_point, temp2 → pool_set_point
-          // UI mapping: state.temp1 = pool (primary), state.temp2 = spa (secondary)
-          // So we swap when sending
+          // API param mapping matches UI mapping now:
+          //   set_temps temp1 param → spa_set_point → UI Temp 1
+          //   set_temps temp2 param → pool_set_point → UI Temp 2
           const resp = await sendCommand('set_temps', {
-            temp1: String(state.temp2),  // spa_set_point ← UI Temp 2
-            temp2: String(state.temp1),  // pool_set_point ← UI Temp 1 (the pool heat target)
+            temp1: String(state.temp1),
+            temp2: String(state.temp2),
           });
-          toast(`Temp 1 (Pool): ${state.temp1}° · Temp 2: ${state.temp2}°`, 'success');
+          toast(`Temp 1: ${state.temp1}° · Temp 2: ${state.temp2}°`, 'success');
         } catch (e) {
           toast('Temperature update failed', 'error');
         }
