@@ -7,7 +7,7 @@
   <title>Pool Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1777832349">
+  <link rel="stylesheet" href="style.css?v=1777832982">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏊</text></svg>">
 </head>
 <body>
@@ -171,7 +171,10 @@
         <section id="panel-schedule" class="panel">
           <div class="section-header">
             <h2>Schedules</h2>
-            <button id="add-schedule-btn" class="btn btn-primary btn-sm">+ Add</button>
+            <div class="schedule-actions-row">
+              <button id="bulk-schedule-btn" class="btn btn-ghost btn-sm">All Off</button>
+              <button id="add-schedule-btn" class="btn btn-primary btn-sm">+ Add</button>
+            </div>
           </div>
           <div id="schedules-list" class="schedules-list">
             <div class="empty-state" id="no-schedules">
@@ -282,6 +285,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=1777832349"></script>
+  <script src="app.js?v=1777832982"></script>
 </body>
 </html>

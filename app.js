@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -601,6 +601,18 @@ function renderSchedules() {
   const list = document.getElementById('schedules-list');
   const empty = document.getElementById('no-schedules');
 
+  // Update bulk on/off button label based on current state
+  const bulkBtn = document.getElementById('bulk-schedule-btn');
+  if (bulkBtn) {
+    if (state.schedules.length === 0) {
+      bulkBtn.style.display = 'none';
+    } else {
+      bulkBtn.style.display = '';
+      const anyEnabled = state.schedules.some(s => s.enabled);
+      bulkBtn.textContent = anyEnabled ? 'All Off' : 'All On';
+    }
+  }
+
   if (state.schedules.length === 0) {
     empty.hidden = false;
     // Remove any schedule cards but keep empty state
@@ -1034,6 +1046,33 @@ function setupEvents() {
 
   // Schedule: add
   document.getElementById('add-schedule-btn').addEventListener('click', () => openScheduleModal());
+
+  // Schedule: bulk on/off — toggles all schedules to opposite of current majority
+  document.getElementById('bulk-schedule-btn').addEventListener('click', async () => {
+    if (state.schedules.length === 0) {
+      toast('No schedules to toggle', 'info');
+      return;
+    }
+    const anyEnabled = state.schedules.some(s => s.enabled);
+    const target = !anyEnabled;  // If any are on, turn all off. Otherwise turn all on.
+
+    try {
+      // Update each schedule that needs changing
+      const toUpdate = state.schedules.filter(s => s.enabled !== target);
+      if (toUpdate.length === 0) {
+        toast(`Already all ${target ? 'on' : 'off'}`, 'info');
+        return;
+      }
+      for (const sched of toUpdate) {
+        sched.enabled = target;
+        await api('/pool/schedules', { method: 'POST', body: JSON.stringify(sched) });
+      }
+      renderSchedules();
+      toast(`All schedules ${target ? 'enabled' : 'disabled'}`, 'success');
+    } catch (e) {
+      toast('Bulk update failed', 'error');
+    }
+  });
 
   // Schedule: save / cancel
   document.getElementById('sched-save').addEventListener('click', saveSchedule);

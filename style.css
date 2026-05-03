@@ -1174,6 +1174,12 @@ select.input optgroup { color: var(--text-dim); }
   to { opacity: 0; transform: translateY(-10px); }
 }
 
+.schedule-actions-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 /* === Pump Cooldown === */
 .cooldown {
   display: inline-block;
