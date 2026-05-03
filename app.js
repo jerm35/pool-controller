@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -145,7 +145,34 @@ let state = {
   selectedLight: null,
   lightEffect: null,
   pumpSpeed: null,
+  pumpCooldownUntil: 0,
 };
+
+// ---- Pump Speed Cooldown ----
+const PUMP_COOLDOWN_MS = 30000; // 30s between pump speed changes (Jandy ePump recommendation)
+
+function pumpCooldownRemaining() {
+  const ms = state.pumpCooldownUntil - Date.now();
+  return ms > 0 ? Math.ceil(ms / 1000) : 0;
+}
+
+function startPumpCooldown() {
+  state.pumpCooldownUntil = Date.now() + PUMP_COOLDOWN_MS;
+  // Tick every second to update displays
+  if (state._cooldownInterval) clearInterval(state._cooldownInterval);
+  state._cooldownInterval = setInterval(() => {
+    if (pumpCooldownRemaining() <= 0) {
+      clearInterval(state._cooldownInterval);
+      state._cooldownInterval = null;
+    }
+    // Re-render anything that displays cooldown
+    if (state.home.status) renderStatus();
+    renderOneTouch();
+    // If pump modal is open, refresh it
+    const modal = document.getElementById('pump-modal');
+    if (modal && !modal.hidden) openPumpModal();
+  }, 1000);
+}
 
 // ---- API Helpers ----
 async function api(path, options = {}) {
@@ -336,13 +363,15 @@ function renderStatus() {
 
   let html = '';
 
-  // Pool Pump — show speed if known
+  // Pool Pump — show speed if known + cooldown timer if active
   if (h.pool_pump !== undefined && h.pool_pump !== '') {
     const speedLabel = pumpOn && state.pumpSpeed ? ` · ${state.pumpSpeed}` : '';
+    const cooldownSec = pumpCooldownRemaining();
+    const cooldownLabel = cooldownSec > 0 ? ` <span class="cooldown">${cooldownSec}s</span>` : '';
     html += `
-      <button class="equip-btn ${pumpOn ? 'on' : ''}" data-action="open-pump-modal">
+      <button class="equip-btn ${pumpOn ? 'on' : ''} ${cooldownSec > 0 ? 'cooling' : ''}" data-action="open-pump-modal">
         <div class="equip-dot"></div>
-        <span class="equip-label">Pool Pump${speedLabel}</span>
+        <span class="equip-label">Pool Pump${speedLabel}${cooldownLabel}</span>
       </button>`;
   }
 
@@ -492,17 +521,81 @@ function renderOneTouch() {
     }
   }
 
+  const cooldownSec = pumpCooldownRemaining();
+
   grid.innerHTML = parsed.map((btn, i) => {
     const isOn = btn.state === '1' || btn.state === '3';
     const isAllOff = i === 0;
+    // Apply cooldown to pump-speed buttons (3=PUMPHIGH, 4=PUMPLOW) and All Off (1)
+    const isPumpRelated = ['1','3','4'].includes(btn.num);
+    const isCooling = cooldownSec > 0 && isPumpRelated;
+    const cooldownLabel = isCooling ? ` <span class="cooldown">${cooldownSec}s</span>` : '';
     return `
-      <button class="onetouch-btn ${isOn ? 'on' : ''} ${isAllOff ? 'alloff' : ''}"
-              data-onetouch="${btn.num}">
-        <span class="onetouch-label">${btn.label || btn.name || `Button ${btn.num}`}</span>
+      <button class="onetouch-btn ${isOn ? 'on' : ''} ${isAllOff ? 'alloff' : ''} ${isCooling ? 'cooling' : ''}"
+              data-onetouch="${btn.num}" ${isCooling ? 'disabled' : ''}>
+        <span class="onetouch-label">${btn.label || btn.name || `Button ${btn.num}`}${cooldownLabel}</span>
         <span class="onetouch-number">#${btn.num}</span>
       </button>
     `;
   }).join('');
+}
+
+// ---- Pump Speed Modal ----
+function openPumpModal() {
+  const modal = document.getElementById('pump-modal');
+  const grid = document.getElementById('pump-options');
+  const cooldownSec = pumpCooldownRemaining();
+
+  // Parse OneTouch state
+  const buttons = [];
+  if (Array.isArray(state.onetouch)) {
+    for (const item of state.onetouch) {
+      if (typeof item === 'object') {
+        for (const [key, val] of Object.entries(item)) {
+          if (key.startsWith('onetouch_')) {
+            const num = key.replace('onetouch_', '');
+            const props = {};
+            if (Array.isArray(val)) for (const p of val) Object.assign(props, p);
+            if (props.status === '1') {
+              buttons.push({ num, label: props.label || `OneTouch ${num}`, active: props.state === '1' });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  let html = '';
+  if (cooldownSec > 0) {
+    html += `<div class="pump-cooldown-banner">Pump cooldown: <strong>${cooldownSec}s</strong> remaining</div>`;
+  }
+
+  const cooldownAttr = cooldownSec > 0 ? 'disabled' : '';
+  // All Off button (typically OneTouch 1)
+  const allOff = buttons.find(b => b.num === '1');
+  if (allOff) {
+    html += `<button class="pump-option alloff" data-pump-action="onetouch" data-num="1" ${cooldownAttr}>${allOff.label}</button>`;
+  } else {
+    html += `<button class="pump-option alloff" data-pump-action="pump-off" ${cooldownAttr}>Pump Off</button>`;
+  }
+
+  // Speed presets (other OneTouch buttons)
+  for (const b of buttons) {
+    if (b.num === '1') continue;
+    const sub = b.num === '3' ? 'Speed: High' : b.num === '4' ? 'Speed: Low' : '';
+    html += `
+      <button class="pump-option ${b.active ? 'on' : ''}" data-pump-action="onetouch" data-num="${b.num}" ${cooldownAttr}>
+        <span>${b.label}</span>
+        ${sub ? `<span class="pump-option-sub">${sub}</span>` : ''}
+      </button>`;
+  }
+
+  grid.innerHTML = html;
+  modal.hidden = false;
+}
+
+function closePumpModal() {
+  document.getElementById('pump-modal').hidden = true;
 }
 
 // ---- Rendering: Schedules ----
@@ -780,58 +873,7 @@ function setupEvents() {
   }
 
   // Pump speed picker modal — uses configured OneTouch presets
-  function openPumpModal() {
-    const modal = document.getElementById('pump-modal');
-    const grid = document.getElementById('pump-options');
-    const pumpOn = state.home.pool_pump === '1' || state.home.pool_pump === '3';
-
-    // Parse OneTouch state
-    const buttons = [];
-    if (Array.isArray(state.onetouch)) {
-      for (const item of state.onetouch) {
-        if (typeof item === 'object') {
-          for (const [key, val] of Object.entries(item)) {
-            if (key.startsWith('onetouch_')) {
-              const num = key.replace('onetouch_', '');
-              const props = {};
-              if (Array.isArray(val)) for (const p of val) Object.assign(props, p);
-              if (props.status === '1') {
-                buttons.push({ num, label: props.label || `OneTouch ${num}`, active: props.state === '1' });
-              }
-            }
-          }
-        }
-      }
-    }
-
-    let html = '';
-    // All Off button (typically OneTouch 1)
-    const allOff = buttons.find(b => b.num === '1');
-    if (allOff) {
-      html += `<button class="pump-option alloff" data-pump-action="onetouch" data-num="1">${allOff.label}</button>`;
-    } else {
-      html += `<button class="pump-option alloff" data-pump-action="pump-off">Pump Off</button>`;
-    }
-
-    // Speed presets (other OneTouch buttons)
-    for (const b of buttons) {
-      if (b.num === '1') continue;
-      const sub = b.num === '3' ? 'Speed: High' : b.num === '4' ? 'Speed: Low' : '';
-      html += `
-        <button class="pump-option ${b.active ? 'on' : ''}" data-pump-action="onetouch" data-num="${b.num}">
-          <span>${b.label}</span>
-          ${sub ? `<span class="pump-option-sub">${sub}</span>` : ''}
-        </button>`;
-    }
-
-    grid.innerHTML = html;
-    modal.hidden = false;
-  }
-
-  function closePumpModal() {
-    document.getElementById('pump-modal').hidden = true;
-  }
-
+  // openPumpModal and closePumpModal are defined at module scope (below setupEvents)
   // Pump modal event delegation
   document.getElementById('pump-modal').addEventListener('click', async (e) => {
     if (e.target.matches('[data-pump-close]')) {
@@ -839,13 +881,20 @@ function setupEvents() {
       return;
     }
     const action = e.target.closest('[data-pump-action]');
-    if (!action) return;
+    if (!action || action.disabled) return;
+
+    // Cooldown check
+    if (pumpCooldownRemaining() > 0) {
+      toast(`Pump cooldown: ${pumpCooldownRemaining()}s`, 'error');
+      return;
+    }
 
     closePumpModal();
     try {
       if (action.dataset.pumpAction === 'pump-off') {
         await sendCommand('pool_pump_off');
         toast('Pump Off', 'success');
+        startPumpCooldown();
       } else if (action.dataset.pumpAction === 'onetouch') {
         const num = action.dataset.num;
         if (num === '3') {
@@ -858,6 +907,7 @@ function setupEvents() {
           await sendCommand(`set_onetouch_${num}`);
           toast(action.querySelector('span')?.textContent || `OneTouch ${num}`, 'success');
         }
+        startPumpCooldown();
       }
     } catch (_) {
       toast('Command failed', 'error');
@@ -943,21 +993,32 @@ function setupEvents() {
   // OneTouch buttons (delegated)
   document.getElementById('onetouch-grid').addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-onetouch]');
-    if (!btn) return;
+    if (!btn || btn.disabled) return;
     const num = btn.dataset.onetouch;
+
+    // Cooldown gate for pump-related buttons (All Off, PUMPHIGH, PUMPLOW)
+    const isPumpRelated = ['1','3','4'].includes(num);
+    if (isPumpRelated && pumpCooldownRemaining() > 0) {
+      toast(`Pump cooldown: ${pumpCooldownRemaining()}s`, 'error');
+      return;
+    }
+
     try {
       // Use smart speed commands for PUMPHIGH/PUMPLOW buttons
       if (num === '3') {
         await sendCommand('pump_high');
         toast('Pump High', 'success');
+        startPumpCooldown();
       } else if (num === '4') {
         await sendCommand('pump_low');
         toast('Pump Low', 'success');
+        startPumpCooldown();
       } else {
         await sendCommand(`set_onetouch_${num}`);
         // Clear speed if All Off
         if (num === '1') {
           await api('/pool/pump-speed', { method: 'POST', body: JSON.stringify({ speed: null }) });
+          startPumpCooldown();
         }
         toast(btn.querySelector('.onetouch-label')?.textContent || `OneTouch ${num}`, 'success');
       }

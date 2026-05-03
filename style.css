@@ -1174,6 +1174,45 @@ select.input optgroup { color: var(--text-dim); }
   to { opacity: 0; transform: translateY(-10px); }
 }
 
+/* === Pump Cooldown === */
+.cooldown {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: rgba(255, 145, 0, 0.15);
+  border: 1px solid rgba(255, 145, 0, 0.3);
+  border-radius: 6px;
+  color: var(--warm);
+  letter-spacing: 0.04em;
+}
+
+.equip-btn.cooling, .onetouch-btn.cooling, .pump-option:disabled {
+  opacity: 0.55;
+}
+
+.equip-btn.cooling, .onetouch-btn.cooling { cursor: wait; }
+.pump-option:disabled { cursor: wait; pointer-events: none; }
+
+.pump-cooldown-banner {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 0.65rem;
+  background: rgba(255, 145, 0, 0.08);
+  border: 1px solid rgba(255, 145, 0, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--warm);
+  font-size: 0.8rem;
+  margin-bottom: 0.4rem;
+}
+
+.pump-cooldown-banner strong {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
 /* === Pump Speed Picker === */
 .pump-options {
   display: grid;
