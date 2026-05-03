@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -64,20 +64,20 @@ const LIGHT_EFFECTS = {
   4: {
     name: 'Jandy LED WaterColors',
     effects: [
-      { id: 1, name: 'Alpine White' },
-      { id: 2, name: 'Sky Blue' },
-      { id: 3, name: 'Cobalt Blue' },
-      { id: 4, name: 'Caribbean Blue' },
-      { id: 5, name: 'Spring Green' },
-      { id: 6, name: 'Emerald Green' },
-      { id: 7, name: 'Emerald Rose' },
-      { id: 8, name: 'Magenta' },
-      { id: 9, name: 'Garnet Red' },
-      { id: 10, name: 'Violet' },
-      { id: 11, name: 'Color Splash' },
-      { id: 12, name: 'Color Roll' },
-      { id: 13, name: 'Glimmer' },
-      { id: 14, name: 'Party Mode' },
+      { id: 1, name: 'Alpine White',   color: '#f4f6ff' },
+      { id: 2, name: 'Sky Blue',       color: '#5fb3ff' },
+      { id: 3, name: 'Cobalt Blue',    color: '#1c4dff' },
+      { id: 4, name: 'Caribbean Blue', color: '#00d4ff' },
+      { id: 5, name: 'Spring Green',   color: '#7eff5a' },
+      { id: 6, name: 'Emerald Green',  color: '#00c853' },
+      { id: 7, name: 'Emerald Rose',   color: '#ff5fa8' },
+      { id: 8, name: 'Magenta',        color: '#ff00aa' },
+      { id: 9, name: 'Garnet Red',     color: '#e6193a' },
+      { id: 10, name: 'Violet',        color: '#9b30ff' },
+      { id: 11, name: 'Color Splash',  color: '#ffd700' },
+      { id: 12, name: 'Color Roll',    color: '#ff7e00' },
+      { id: 13, name: 'Glimmer',       color: '#cfe5ff' },
+      { id: 14, name: 'Party Mode',    color: '#ff3df3' },
     ],
   },
   // subtype 5: Pentair Intellibrite
@@ -450,13 +450,18 @@ function renderLights() {
 
   offBtn.style.display = isOn ? '' : 'none';
 
-  // Render color effect buttons with active state from server
+  // Render color effect buttons with per-button color from the LIGHT_EFFECTS table
   const effects = LIGHT_EFFECTS[light.subtype]?.effects || [];
-  grid.innerHTML = effects.map(eff => `
-    <button class="effect-btn ${isOn && activeEffect?.id === String(eff.id) ? 'active' : ''}" data-effect="${eff.id}" data-subtype="${light.subtype}">
-      ${eff.name}
-    </button>
-  `).join('');
+  grid.innerHTML = effects.map(eff => {
+    const color = eff.color || '#00e5ff';
+    const isActive = isOn && activeEffect?.id === String(eff.id);
+    return `
+      <button class="effect-btn ${isActive ? 'active' : ''}"
+              style="--eff-color: ${color}"
+              data-effect="${eff.id}" data-subtype="${light.subtype}">
+        ${eff.name}
+      </button>`;
+  }).join('');
 }
 
 function renderAuxDevices() {

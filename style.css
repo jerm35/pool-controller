@@ -679,33 +679,65 @@ body {
 
 .effects-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
 }
 
 .effect-btn {
-  padding: 0.6rem 0.4rem;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
-  color: var(--text-dim);
+  /* Each button uses its own --eff-color variable to mock the actual light color */
+  --eff-color: var(--cyan);
+  position: relative;
+  overflow: hidden;
+  padding: 1.1rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--eff-color);
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--eff-color) 24%, transparent) 0%, transparent 70%),
+    var(--bg-surface);
+  color: var(--text);
   font-family: var(--font);
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
   transition: all 0.2s;
   text-align: center;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  min-height: 64px;
+}
+
+.effect-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--eff-color) 14%, transparent), transparent 60%);
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 0.2s;
 }
 
 .effect-btn:hover {
-  border-color: var(--cyan-dim);
-  color: var(--text);
+  border-color: var(--eff-color);
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--eff-color) 38%, transparent) 0%, transparent 70%),
+    var(--bg-surface);
+}
+
+.effect-btn:hover::before {
+  opacity: 1.5;
 }
 
 .effect-btn.active {
-  border-color: var(--cyan);
-  background: var(--cyan-glow);
-  color: var(--cyan);
+  border-color: var(--eff-color);
+  background:
+    radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--eff-color) 55%, transparent) 0%, transparent 80%),
+    var(--bg-surface);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--eff-color) 35%, transparent),
+              inset 0 0 12px color-mix(in srgb, var(--eff-color) 25%, transparent);
+}
+
+.effect-btn.active::before {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--eff-color) 30%, transparent), transparent 70%);
 }
 
 /* === OneTouch Grid === */
