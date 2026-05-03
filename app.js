@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -522,13 +522,11 @@ function renderOneTouch() {
   }
 
   const cooldownSec = pumpCooldownRemaining();
+  const isCooling = cooldownSec > 0;
 
   grid.innerHTML = parsed.map((btn, i) => {
     const isOn = btn.state === '1' || btn.state === '3';
     const isAllOff = i === 0;
-    // Apply cooldown to pump-speed buttons (3=PUMPHIGH, 4=PUMPLOW) and All Off (1)
-    const isPumpRelated = ['1','3','4'].includes(btn.num);
-    const isCooling = cooldownSec > 0 && isPumpRelated;
     const cooldownLabel = isCooling ? ` <span class="cooldown">${cooldownSec}s</span>` : '';
     return `
       <button class="onetouch-btn ${isOn ? 'on' : ''} ${isAllOff ? 'alloff' : ''} ${isCooling ? 'cooling' : ''}"
@@ -996,10 +994,9 @@ function setupEvents() {
     if (!btn || btn.disabled) return;
     const num = btn.dataset.onetouch;
 
-    // Cooldown gate for pump-related buttons (All Off, PUMPHIGH, PUMPLOW)
-    const isPumpRelated = ['1','3','4'].includes(num);
-    if (isPumpRelated && pumpCooldownRemaining() > 0) {
-      toast(`Pump cooldown: ${pumpCooldownRemaining()}s`, 'error');
+    // Cooldown gate — applies to all OneTouch buttons
+    if (pumpCooldownRemaining() > 0) {
+      toast(`Cooldown: ${pumpCooldownRemaining()}s`, 'error');
       return;
     }
 
@@ -1008,20 +1005,18 @@ function setupEvents() {
       if (num === '3') {
         await sendCommand('pump_high');
         toast('Pump High', 'success');
-        startPumpCooldown();
       } else if (num === '4') {
         await sendCommand('pump_low');
         toast('Pump Low', 'success');
-        startPumpCooldown();
       } else {
         await sendCommand(`set_onetouch_${num}`);
-        // Clear speed if All Off
         if (num === '1') {
           await api('/pool/pump-speed', { method: 'POST', body: JSON.stringify({ speed: null }) });
-          startPumpCooldown();
         }
         toast(btn.querySelector('.onetouch-label')?.textContent || `OneTouch ${num}`, 'success');
       }
+      // Start cooldown for any OneTouch action
+      startPumpCooldown();
     } catch (_) {}
   });
 
