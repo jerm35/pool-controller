@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -324,10 +324,10 @@ function renderStatus() {
 
   // Pool pump
   const pumpOn = h.pool_pump === '1' || h.pool_pump === '3';
-  // Heater: 0=off, 1=temp1 active, 3=temp2 active
+  // Heater: 0=off, 1=spa_set_point active (UI Temp 2), 3=pool_set_point active (UI Temp 1)
   const heaterState = h.pool_heater || '0';
-  const temp1Active = heaterState === '1';
-  const temp2Active = heaterState === '3';
+  const temp1Active = heaterState === '3';  // UI Temp 1 = pool_set_point
+  const temp2Active = heaterState === '1';  // UI Temp 2 = spa_set_point
   const freezeOn = h.freeze_protection === '1';
 
   let html = '';
@@ -366,9 +366,12 @@ function renderStatus() {
 
   equipGrid.innerHTML = html;
 
-  // Setpoints from API — temp1 = spa_set_point, temp2 = pool_set_point (API naming)
-  if (h.spa_set_point) state.temp1 = parseInt(h.spa_set_point);
-  if (h.pool_set_point) state.temp2 = parseInt(h.pool_set_point);
+  // Setpoints from API — UI label "Temp 1" = pool_set_point (the primary pool heat target)
+  // The API's set_temps params are inverted: temp1 param writes spa_set_point, temp2 param writes pool_set_point
+  if (!state.setpointEditing) {
+    if (h.pool_set_point) state.temp1 = parseInt(h.pool_set_point);  // Pool primary
+    if (h.spa_set_point) state.temp2 = parseInt(h.spa_set_point);    // Secondary
+  }
   document.getElementById('temp1-setpoint').textContent = state.temp1;
   document.getElementById('temp2-setpoint').textContent = state.temp2;
 }
@@ -715,44 +718,48 @@ function setupEvents() {
 
     try {
       if (heatTarget) {
-        // Heater cycles: Off(0) → Temp1(1) → Temp2(3) → Off(0)
+        // Heater cycles: Off(0) → state=1 (UI Temp 2) → state=3 (UI Temp 1) → Off(0)
+        // UI Temp 1 = pool_set_point (the pool heat target) = state 3
+        // UI Temp 2 = spa_set_point (secondary) = state 1
         const current = state.home.pool_heater || '0';
-        const isTemp1 = current === '1';
-        const isTemp2 = current === '3';
+        const atUiTemp1 = current === '3';  // pool_set_point active
+        const atUiTemp2 = current === '1';  // spa_set_point active
+
+        const toggleNTimes = async (n) => {
+          for (let i = 0; i < n; i++) {
+            if (i > 0) await new Promise(r => setTimeout(r, 2000));
+            await sendCommand('set_pool_heater');
+          }
+        };
 
         if (heatTarget === 'temp1') {
-          if (isTemp1) {
-            // Already on Temp1 — turn off (one toggle: Temp1→Temp2, another: Temp2→Off... actually just toggle to cycle)
-            // Toggle once to go to Temp2, toggle again to go to Off
-            await sendCommand('set_pool_heater');
-            await new Promise(r => setTimeout(r, 2000));
-            await sendCommand('set_pool_heater');
+          // Want UI Temp 1 (state=3, pool_set_point active)
+          if (atUiTemp1) {
+            // Already on Temp 1 → cycle to Off (one toggle: state 3 → Off)
+            await toggleNTimes(1);
             toast('Heater Off', 'success');
-          } else if (isTemp2) {
-            // Temp2 → Off → Temp1 = two toggles
-            await sendCommand('set_pool_heater');
-            await new Promise(r => setTimeout(r, 2000));
-            await sendCommand('set_pool_heater');
-            toast('Temp 1 Active', 'success');
+          } else if (atUiTemp2) {
+            // state=1 → state=3 (one toggle)
+            await toggleNTimes(1);
+            toast('Temp 1 Active (Pool)', 'success');
           } else {
-            // Off → Temp1 = one toggle
-            await sendCommand('set_pool_heater');
-            toast('Temp 1 Active', 'success');
+            // Off → state=1 → state=3 (two toggles)
+            await toggleNTimes(2);
+            toast('Temp 1 Active (Pool)', 'success');
           }
         } else if (heatTarget === 'temp2') {
-          if (isTemp2) {
-            // Already on Temp2 — turn off (one toggle)
-            await sendCommand('set_pool_heater');
+          // Want UI Temp 2 (state=1, spa_set_point active)
+          if (atUiTemp2) {
+            // Already on Temp 2 → cycle to Temp 1, then to Off (two toggles)
+            await toggleNTimes(2);
             toast('Heater Off', 'success');
-          } else if (isTemp1) {
-            // Temp1 → Temp2 = one toggle
-            await sendCommand('set_pool_heater');
+          } else if (atUiTemp1) {
+            // state=3 → Off → state=1 (two toggles)
+            await toggleNTimes(2);
             toast('Temp 2 Active', 'success');
           } else {
-            // Off → Temp1 → Temp2 = two toggles
-            await sendCommand('set_pool_heater');
-            await new Promise(r => setTimeout(r, 2000));
-            await sendCommand('set_pool_heater');
+            // Off → state=1 (one toggle)
+            await toggleNTimes(1);
             toast('Temp 2 Active', 'success');
           }
         }
@@ -765,6 +772,8 @@ function setupEvents() {
   });
 
   // Setpoint controls
+  // Single shared debounce timer so + and - on different buttons coalesce
+  let setpointDebounce = null;
   document.querySelectorAll('[data-setpoint]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const which = btn.dataset.setpoint; // 'temp1' or 'temp2'
@@ -772,17 +781,25 @@ function setupEvents() {
       state[which] = Math.max(40, Math.min(104, state[which] + dir));
       document.getElementById(`${which}-setpoint`).textContent = state[which];
 
-      // Debounce the API call
-      clearTimeout(btn._debounce);
-      btn._debounce = setTimeout(async () => {
+      // Lock setpoints so auto-refresh doesn't clobber pending edits
+      state.setpointEditing = true;
+
+      clearTimeout(setpointDebounce);
+      setpointDebounce = setTimeout(async () => {
         try {
-          await sendCommand('set_temps', {
-            temp1: String(state.temp1),
-            temp2: String(state.temp2),
+          // API param mapping: temp1 → spa_set_point, temp2 → pool_set_point
+          // UI mapping: state.temp1 = pool (primary), state.temp2 = spa (secondary)
+          // So we swap when sending
+          const resp = await sendCommand('set_temps', {
+            temp1: String(state.temp2),  // spa_set_point ← UI Temp 2
+            temp2: String(state.temp1),  // pool_set_point ← UI Temp 1 (the pool heat target)
           });
-          toast('Temperature updated', 'success');
-        } catch (_) {}
-      }, 800);
+          toast(`Temp 1 (Pool): ${state.temp1}° · Temp 2: ${state.temp2}°`, 'success');
+        } catch (e) {
+          toast('Temperature update failed', 'error');
+        }
+        setTimeout(() => { state.setpointEditing = false; }, 8000);
+      }, 1200);
     });
   });
 
