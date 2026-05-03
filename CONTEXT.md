@@ -118,14 +118,14 @@ The iAqualink API has **no explicit on/off commands**. Every command toggles the
 
 | Smart Command | Behavior |
 |--------------|----------|
-| `pump_high` | Check pump on → turn on if needed → fire PUMPHIGH OneTouch |
-| `pump_low` | Check pump on → turn on if needed → fire PUMPLOW OneTouch |
+| `pump_high` | Check pump on → turn on if needed → if PUMPLOW active, deactivate first (2.5s wait) → fire PUMPHIGH OneTouch |
+| `pump_low` | Check pump on → turn on if needed → if PUMPHIGH active, deactivate first (2.5s wait) → fire PUMPLOW OneTouch |
 | `pool_pump_on` | Check state → only toggle if pump is off |
 | `pool_pump_off` | Check state → only toggle if pump is on |
 | `pool_heater_on` | Check state → only toggle if heater is off |
 | `pool_heater_off` | Check state → only toggle if heater is on |
 
-The cron scheduler checks **live OneTouch API state** (not cached) before firing speed commands to avoid toggling off an already-active preset.
+**The mutual-exclusion fix (critical):** When a speed preset (like PUMPLOW state=1) is active and you fire the *other* speed preset (`set_onetouch_3` for PUMPHIGH), the AqualinkRS ends up with **both** in state=1 and resolves the conflict by reverting to the lower speed. The smart commands now read live OneTouch state via `get_onetouch`, deactivate the conflicting preset first, wait 2.5 seconds, then activate the desired preset. Applies to both manual commands and the cron scheduler.
 
 ### WebTouch (Panel) Authentication
 
@@ -242,21 +242,37 @@ The API does **not** return pump RPM or speed. Speed is inferred from which OneT
 
 ### Tabs
 
-1. **Status** — Pool temp, air temp (with animated ring), equipment buttons (Pool Pump with speed, Temp 1, Temp 2, Freeze Protect), temperature setpoint +/- controls
-2. **Lights** — Shows all 14 Jandy WaterColors effects as always-visible grid. Tap to activate. Turn Off button. Active color synced to KV across devices.
-3. **Speed** — OneTouch buttons (All OFF, CLEAN, PUMPHIGH, PUMPLOW). Auxiliary device toggles (filtered to only show active or custom-labeled devices).
-4. **Schedule** — CRUD for cron schedules. Sorted by time. Shows custom OneTouch names. Edit/delete/toggle per schedule.
+1. **Status** — Pool temp, air temp (with animated ring), equipment row:
+   - **Pool Pump** — shows current speed (High/Low). Tapping opens a **speed picker modal** with all configured OneTouch presets (All Off, CLEAN, PUMPHIGH, PUMPLOW). Active preset highlighted.
+   - **Temp 1** and **Temp 2** — independent toggles for the two heat setpoints, **mutually exclusive** (turning one on auto-disables the other since the system has a single physical heater). Shows 🔥 when actively heating. `spa_set_point`/`spa_heater` drives Temp 1; `pool_set_point`/`pool_heater` drives Temp 2.
+   - **Freeze Protect** — read-only indicator (no API command to set it; the controller manages this automatically based on air temp threshold)
+   - Temperature setpoint +/- controls with 1.2s debounce and edit-lock (auto-refresh won't clobber pending edits while user is tapping +/-)
+2. **Lights** — Shows all 14 Jandy WaterColors effects as always-visible grid. Tap to activate. Turn Off button. Active color synced to KV across devices. 3-second cooldown between color changes.
+3. **Speed** — OneTouch buttons (All OFF, CLEAN, PUMPHIGH, PUMPLOW). Auxiliary device toggles (filtered to show only active or custom-labeled devices). All OneTouch buttons enforce 30s pump cooldown.
+4. **Schedule** — CRUD for cron schedules. Sorted by time. Shows custom OneTouch names. Edit/delete/toggle per schedule. **Bulk button** (left of "+ Add") shows "All Off" when any are enabled, "All On" when all disabled — flips every schedule at once.
 5. **Panel** — Opens authenticated WebTouch popup via Cloud Run. No login required.
+
+### Pump Speed Cooldown (30 seconds)
+
+Per Jandy ePump documentation, minimum 30 seconds between speed changes allows the motor to ramp and stabilize, and avoids AqualinkRS controller race conditions.
+
+**Applies to all OneTouch buttons** (All Off, CLEAN, PUMPHIGH, PUMPLOW, etc.) and the Pool Pump button on Status:
+- After any pump-related command, a 30s timer starts
+- All affected buttons show a live countdown badge (`28s`) and are disabled
+- Pump modal shows an orange banner with remaining seconds
+- Tapping during cooldown shows a toast warning, no command is sent
+- Heater toggles, lights, and aux devices are NOT gated by this cooldown
 
 ### Auto-Refresh Behavior
 
 - Every 30 seconds: polls `get_home` for temperature/equipment updates
 - After any command: refreshes all data at 2s and 5s delays
 - Light effect and pump speed derived from live API data on every refresh
+- During setpoint editing: an `edit-lock` prevents the auto-refresh from overwriting in-progress +/- changes
 
 ### Cache Busting
 
-JS and CSS referenced with `?v=TIMESTAMP` query params. No-cache meta tag. Version indicator shown in header badge (e.g., "Pool v13").
+JS and CSS referenced with `?v=TIMESTAMP` query params bumped on every deploy. No-cache meta tag. Version indicator shown in header badge (e.g., "Pool v21"). On iOS, the home-screen webapp has its own cache separate from Safari — must remove the home-screen icon and re-add to fully bust.
 
 ## Known Limitations
 

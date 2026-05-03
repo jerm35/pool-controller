@@ -6,11 +6,19 @@ Custom iAqualink pool management dashboard for Jandy AqualinkRS controllers. Mob
 
 ## Features
 
-- **Status** — Pool/air temperature, pump state with speed indicator (High/Low), Temp 1/Temp 2 heater setpoints, freeze protection
-- **Lights** — Jandy LED WaterColors with all 14 color effects, tap to activate, synced across devices
-- **Speed** — OneTouch quick-action buttons (PUMPHIGH, PUMPLOW, CLEAN, All OFF), auxiliary device toggles
-- **Schedule** — Visual scheduler with Pump High/Low speed commands, Pump On/Off, Heater On/Off. Runs on Cloudflare Worker cron (every minute, Pacific time)
-- **Panel** — Opens the full AqualinkRS WebTouch remote panel via Cloud Run (auto-authenticated, no login required). View/edit controller schedules, pump speeds, OneTouch configuration, and diagnostics
+- **Status** — Pool/air temperature, animated temperature ring, Pool Pump button (tap → speed picker modal with all OneTouch presets), Temp 1 and Temp 2 heater toggles (mutually exclusive — single-heater system), 🔥 indicator when heater is actively firing, freeze protection indicator, +/- temperature setpoint controls with edit-lock
+- **Lights** — Jandy LED WaterColors with all 14 color effects, always-visible grid, tap to activate, active color synced across devices via KV, 3-second cooldown between color changes
+- **Speed** — OneTouch quick-action buttons (PUMPHIGH, PUMPLOW, CLEAN, All OFF), auxiliary device toggles (filtered to active/labeled only). 30-second pump cooldown enforced.
+- **Schedule** — Visual scheduler with Pump High/Low speed commands, Pump On/Off, Heater On/Off, OneTouch presets. Sorted by time. Bulk **All On / All Off** button. Custom OneTouch labels shown. Edit/delete/toggle per schedule. Runs on Cloudflare Worker cron (every minute, Pacific time)
+- **Panel** — Opens the full AqualinkRS WebTouch remote panel via Cloud Run (auto-authenticated, no login required). View/edit controller schedules, individual pump speed presets (Pool Low/High, Speed3-8, etc.), OneTouch configuration, and diagnostics
+
+## Smart Behaviors
+
+- **Pump speed mutual exclusion** — When switching between PUMPHIGH and PUMPLOW, the worker deactivates the conflicting preset first (with 2.5s wait) before activating the new one. Prevents the AqualinkRS from reverting to the lower speed when both end up "active."
+- **Heater mutual exclusion** — Single-heater systems can only fire one channel at a time, so toggling one Temp button auto-disables the other.
+- **30-second pump cooldown** — Per Jandy ePump spec, prevents rapid speed changes that confuse the controller. All OneTouch buttons disable with live countdown badge.
+- **Setpoint edit lock** — Auto-refresh skips temperature setpoint values for 8 seconds after user edits, so +/- taps aren't clobbered mid-edit.
+- **Stateful commands** — `pump_high`, `pump_low`, `pool_pump_on/off`, `pool_heater_on/off` check current state via the API before sending toggles, avoiding "already correct → toggled off" issues.
 
 ## Architecture
 
