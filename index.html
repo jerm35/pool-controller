@@ -7,7 +7,7 @@
   <title>Pool Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1777828355">
+  <link rel="stylesheet" href="style.css?v=1777831551">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏊</text></svg>">
 </head>
 <body>
@@ -237,6 +237,19 @@
               </div>
             </div>
           </div>
+
+          <!-- Pump speed picker modal -->
+          <div id="pump-modal" class="modal" hidden>
+            <div class="modal-backdrop" data-pump-close></div>
+            <div class="modal-content">
+              <h3>Pool Pump</h3>
+              <p class="section-desc">Pick a speed preset</p>
+              <div id="pump-options" class="pump-options"></div>
+              <div class="modal-actions">
+                <button class="btn btn-ghost" data-pump-close>Close</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- PANEL (WebTouch) -->
@@ -269,6 +282,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=1777828355"></script>
+  <script src="app.js?v=1777831551"></script>
 </body>
 </html>

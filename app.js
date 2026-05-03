@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -340,7 +340,7 @@ function renderStatus() {
   if (h.pool_pump !== undefined && h.pool_pump !== '') {
     const speedLabel = pumpOn && state.pumpSpeed ? ` · ${state.pumpSpeed}` : '';
     html += `
-      <button class="equip-btn ${pumpOn ? 'on' : ''}" data-cmd="set_pool_pump">
+      <button class="equip-btn ${pumpOn ? 'on' : ''}" data-action="open-pump-modal">
         <div class="equip-dot"></div>
         <span class="equip-label">Pool Pump${speedLabel}</span>
       </button>`;
@@ -719,6 +719,13 @@ function setupEvents() {
 
   // Equipment toggles (delegated)
   document.getElementById('equip-grid').addEventListener('click', async (e) => {
+    // Special: Pool Pump opens the speed picker modal
+    const pumpBtn = e.target.closest('[data-action="open-pump-modal"]');
+    if (pumpBtn) {
+      openPumpModal();
+      return;
+    }
+
     const btn = e.target.closest('[data-cmd], [data-heat-channel]');
     if (!btn || btn.classList.contains('sending')) return;
     btn.classList.add('sending');
@@ -771,6 +778,91 @@ function setupEvents() {
   function temp2ActiveBefore() {
     return state.home.pool_heater === '1' || state.home.pool_heater === '3';
   }
+
+  // Pump speed picker modal — uses configured OneTouch presets
+  function openPumpModal() {
+    const modal = document.getElementById('pump-modal');
+    const grid = document.getElementById('pump-options');
+    const pumpOn = state.home.pool_pump === '1' || state.home.pool_pump === '3';
+
+    // Parse OneTouch state
+    const buttons = [];
+    if (Array.isArray(state.onetouch)) {
+      for (const item of state.onetouch) {
+        if (typeof item === 'object') {
+          for (const [key, val] of Object.entries(item)) {
+            if (key.startsWith('onetouch_')) {
+              const num = key.replace('onetouch_', '');
+              const props = {};
+              if (Array.isArray(val)) for (const p of val) Object.assign(props, p);
+              if (props.status === '1') {
+                buttons.push({ num, label: props.label || `OneTouch ${num}`, active: props.state === '1' });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    let html = '';
+    // All Off button (typically OneTouch 1)
+    const allOff = buttons.find(b => b.num === '1');
+    if (allOff) {
+      html += `<button class="pump-option alloff" data-pump-action="onetouch" data-num="1">${allOff.label}</button>`;
+    } else {
+      html += `<button class="pump-option alloff" data-pump-action="pump-off">Pump Off</button>`;
+    }
+
+    // Speed presets (other OneTouch buttons)
+    for (const b of buttons) {
+      if (b.num === '1') continue;
+      const sub = b.num === '3' ? 'Speed: High' : b.num === '4' ? 'Speed: Low' : '';
+      html += `
+        <button class="pump-option ${b.active ? 'on' : ''}" data-pump-action="onetouch" data-num="${b.num}">
+          <span>${b.label}</span>
+          ${sub ? `<span class="pump-option-sub">${sub}</span>` : ''}
+        </button>`;
+    }
+
+    grid.innerHTML = html;
+    modal.hidden = false;
+  }
+
+  function closePumpModal() {
+    document.getElementById('pump-modal').hidden = true;
+  }
+
+  // Pump modal event delegation
+  document.getElementById('pump-modal').addEventListener('click', async (e) => {
+    if (e.target.matches('[data-pump-close]')) {
+      closePumpModal();
+      return;
+    }
+    const action = e.target.closest('[data-pump-action]');
+    if (!action) return;
+
+    closePumpModal();
+    try {
+      if (action.dataset.pumpAction === 'pump-off') {
+        await sendCommand('pool_pump_off');
+        toast('Pump Off', 'success');
+      } else if (action.dataset.pumpAction === 'onetouch') {
+        const num = action.dataset.num;
+        if (num === '3') {
+          await sendCommand('pump_high');
+          toast('Pump High', 'success');
+        } else if (num === '4') {
+          await sendCommand('pump_low');
+          toast('Pump Low', 'success');
+        } else {
+          await sendCommand(`set_onetouch_${num}`);
+          toast(action.querySelector('span')?.textContent || `OneTouch ${num}`, 'success');
+        }
+      }
+    } catch (_) {
+      toast('Command failed', 'error');
+    }
+  });
 
   // Setpoint controls
   // Single shared debounce timer so + and - on different buttons coalesce

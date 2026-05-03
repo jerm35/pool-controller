@@ -1174,6 +1174,59 @@ select.input optgroup { color: var(--text-dim); }
   to { opacity: 0; transform: translateY(-10px); }
 }
 
+/* === Pump Speed Picker === */
+.pump-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.pump-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 1rem 0.6rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.pump-option:hover {
+  border-color: var(--border-active);
+  background: var(--bg-card-hover);
+}
+
+.pump-option.on {
+  border-color: var(--cyan-dim);
+  background: var(--cyan-glow);
+  color: var(--cyan);
+}
+
+.pump-option.alloff {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, rgba(255, 82, 82, 0.05), transparent);
+  border-color: rgba(255, 82, 82, 0.2);
+  color: var(--red);
+}
+
+.pump-option.alloff:hover { border-color: rgba(255, 82, 82, 0.4); }
+
+.pump-option-sub {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
 /* === WebTouch Panel === */
 .panel-display {
   background: var(--bg-card);
