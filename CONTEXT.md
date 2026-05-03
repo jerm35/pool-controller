@@ -276,11 +276,33 @@ JS and CSS referenced with `?v=TIMESTAMP` query params bumped on every deploy. N
 
 ## Known Limitations
 
-1. **Pump RPM not available** from cloud API — speed shown as High/Low based on OneTouch state
+1. **Pump RPM not available** from current API integration — speed shown as High/Low based on OneTouch state
 2. **Controller's built-in schedule** not readable via cloud API — only editable through WebTouch panel popup
 3. **WebTouch panel** opens as popup (X-Frame-Options blocks iframe embedding)
 4. **Light color switching** has 3-second cooldown to prevent controller toggle issues
 5. **All commands are toggles** — smart commands mitigate but edge cases may exist if state changes between check and toggle
+6. **8 individual VSP speed presets** (Pool Low/High, Speed3-8) — exposed in iAqualink mobile's "Adjust Pump Speeds" but use AWS-signed v2 endpoints (NOT YET IMPLEMENTED — see Future Work below)
+
+## Future Work
+
+### VSP Direct Speed Control (researched but not built)
+
+The user has 8 configured pump speed presets visible in the iAqualink mobile app's "Adjust Pump Speeds" menu. The new mobile app uses AWS-signed v2 endpoints (Cognito identity pool credentials → AWS Sig V4 → API Gateway). We've confirmed `/v2/devices/{serial}/*` endpoints reject Bearer JWT auth and require Sig V4.
+
+**Login response contains everything needed:**
+- `userPoolOAuth.IdToken` (JWT) — already used for /v2/users/* endpoints
+- `credentials.{AccessKeyId, SecretKey, SessionToken, Expiration, IdentityId}` — temporary AWS credentials for Sig V4 (NOT YET USED)
+- `cognitoPool.region` — AWS region for signing
+
+**Recommended research order before going AWS Sig V4:**
+1. Try `https://prod.zodiac-io.com/devices/v2/{serial}/{features|shadow|info|site}` with Bearer idToken — these are documented in tekkamanendless/iaqualink Go README and might work without Sig V4
+2. Check the AWS IoT shadow approach — `POST /shadow` with `{state: {desired: {pump: {speed: "Pool High"}}}}`
+3. As last resort: implement AWS Sig V4 manually in the Cloudflare Worker (no aws-sdk package — Workers don't support it)
+4. Alternative path: AWS IoT MQTT via the existing pool-panel-proxy Cloud Run service (Workers can't hold persistent MQTT connections)
+
+**Integration target:** Replace OneTouch-based speed picker modal with real preset buttons (Pool Low @ 1750 RPM, Pool High @ 2750 RPM, etc.). Add to schedule dropdown. Keep OneTouch as fallback.
+
+**Don't break:** The current `pump_high`/`pump_low` smart commands with mutex fix work and should remain.
 
 ## Deployment
 
