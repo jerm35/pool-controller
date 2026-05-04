@@ -285,24 +285,35 @@ JS and CSS referenced with `?v=TIMESTAMP` query params bumped on every deploy. N
 
 ## Future Work
 
-### VSP Direct Speed Control (researched but not built)
+### VSP Direct Speed Control — researched 2026-05-03, infeasible from Worker
 
-The user has 8 configured pump speed presets visible in the iAqualink mobile app's "Adjust Pump Speeds" menu. The new mobile app uses AWS-signed v2 endpoints (Cognito identity pool credentials → AWS Sig V4 → API Gateway). We've confirmed `/v2/devices/{serial}/*` endpoints reject Bearer JWT auth and require Sig V4.
+The user has 8 configured pump speed presets in iAqualink mobile's "Adjust Pump Speeds" (Pool Low/High @ 1750/2750 RPM, Speed3-8). Four orthogonal experiments confirmed every Workers-reachable HTTPS path is blocked at the IAM layer. Keep the existing `pump_high`/`pump_low` smart commands.
 
-**Login response contains everything needed:**
-- `userPoolOAuth.IdToken` (JWT) — already used for /v2/users/* endpoints
-- `credentials.{AccessKeyId, SecretKey, SessionToken, Expiration, IdentityId}` — temporary AWS credentials for Sig V4 (NOT YET USED)
-- `cognitoPool.region` — AWS region for signing
+**Verified-blocked paths (do not retry):**
 
-**Recommended research order before going AWS Sig V4:**
-1. Try `https://prod.zodiac-io.com/devices/v2/{serial}/{features|shadow|info|site}` with Bearer idToken — these are documented in tekkamanendless/iaqualink Go README and might work without Sig V4
-2. Check the AWS IoT shadow approach — `POST /shadow` with `{state: {desired: {pump: {speed: "Pool High"}}}}`
-3. As last resort: implement AWS Sig V4 manually in the Cloudflare Worker (no aws-sdk package — Workers don't support it)
-4. Alternative path: AWS IoT MQTT via the existing pool-panel-proxy Cloud Run service (Workers can't hold persistent MQTT connections)
+| Approach | Result |
+|---|---|
+| Bearer JWT → `prod.zodiac-io.com/devices/v2/{serial}/*` | 401 "Device does not belong to user" or 400 "missing signature" |
+| Sig V4 (Zodiac-issued temp creds) → `prm.iaqualink.net/v2/devices/{serial}/{features,shadow,site}` | 403 — `Cognito_mobileAuth_Role` lacks `execute-api:Invoke` |
+| `GetCredentialsForIdentity` direct call with IdToken in `Logins` map → retry above | Same role, same 403 — no upgrade exists |
+| Sig V4 (service `iotdata`) → `iot.us-east-1.amazonaws.com/things/*/shadow` (7 thingName candidates) | All 403 `{"message":null}` — IAM denies `iot:GetThingShadow` |
 
-**Integration target:** Replace OneTouch-based speed picker modal with real preset buttons (Pool Low @ 1750 RPM, Pool High @ 2750 RPM, etc.). Add to schedule dropdown. Keep OneTouch as fallback.
+The Sig V4 signer was correct in every test — AWS recognized every signature. The wall is purely IAM/IoT-Policy permissions.
 
-**Don't break:** The current `pump_high`/`pump_low` smart commands with mutex fix work and should remain.
+**Concrete AWS intel from the IAM 403:**
+- Zodiac account: `167683098627`
+- API Gateway: `55iqh0sqx9` (stage `prod`, region `us-east-1`)
+- IAM role: `arn:aws:sts::167683098627:assumed-role/Cognito_mobileAuth_Role/CognitoIdentityCredentials`
+- IoT Data Plane: `a1zi08qpbrtjyq-ats.iot.us-east-1.amazonaws.com`
+- User Pool: `us-east-1_DBiUTFVL1`
+
+**Remaining viable paths if revisited:**
+1. **MQTT-over-WSS in `pool-panel-proxy` Cloud Run.** AWS IoT enforces IAM (HTTPS data plane, blocked) and **IoT Policies** (MQTT) separately — the role may have IoT Policy permissions even though IAM denies `iot:*`. Workers can't hold MQTT sockets; Cloud Run already has the 1-hour timeout for it. ~300-500 LOC. Risk: IoT Policy could also be locked down.
+2. **mitmproxy iOS app.** Definitive answer in 30 min if SSL pinning bypassable. Requires iOS device + cert setup.
+
+**Why deferred:** The 8 configured presets resolve to only 3 distinct RPM values (1750/2250/2750), so payoff over the existing 2-preset OneTouch flow is small. Not worth the Cloud Run MQTT build at present.
+
+**Don't break:** The `pump_high`/`pump_low` smart commands with mutex fix are the canonical pump-speed mechanism.
 
 ## Deployment
 
