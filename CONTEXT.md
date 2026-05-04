@@ -249,7 +249,7 @@ The API does **not** return pump RPM or speed. Speed is inferred from which OneT
    - Temperature setpoint +/- controls with 1.2s debounce and edit-lock (auto-refresh won't clobber pending edits while user is tapping +/-)
 2. **Lights** — Shows all 14 Jandy WaterColors effects as always-visible grid. Tap to activate. Turn Off button. Active color synced to KV across devices. 3-second cooldown between color changes.
 3. **Speed** — OneTouch buttons (All OFF, CLEAN, PUMPHIGH, PUMPLOW). Auxiliary device toggles (filtered to show only active or custom-labeled devices). All OneTouch buttons enforce 30s pump cooldown.
-4. **Schedule** — CRUD for cron schedules. Sorted by time. Shows custom OneTouch names. Edit/delete/toggle per schedule. **Bulk button** (left of "+ Add") shows "All Off" when any are enabled, "All On" when all disabled — flips every schedule at once.
+4. **Schedule** — CRUD for cron schedules. Sorted by time. Shows custom OneTouch names. Edit/delete/toggle per schedule. **Bulk button** (left of "+ Add") shows "All Off" when any are enabled, "All On" when all disabled — flips every schedule at once. **Active highlight:** the most-recently-passed enabled schedule (respecting its day-of-week filter; falls back to yesterday's last fire if nothing has fired today yet) gets a green border + glow. Re-evaluated every 30s off the local clock — no extra fetch.
 5. **Panel** — Opens authenticated WebTouch popup via Cloud Run. No login required.
 
 ### Pump Speed Cooldown (30 seconds)
@@ -272,7 +272,7 @@ Per Jandy ePump documentation, minimum 30 seconds between speed changes allows t
 
 ### Cache Busting
 
-JS and CSS referenced with `?v=TIMESTAMP` query params bumped on every deploy. No-cache meta tag. Version indicator shown in header badge (e.g., "Pool v21"). On iOS, the home-screen webapp has its own cache separate from Safari — must remove the home-screen icon and re-add to fully bust.
+JS and CSS referenced with `?v=TIMESTAMP` query params bumped on every deploy. No-cache meta tag. Version indicator shown in header badge (e.g., "Pool v23"). On iOS, the home-screen webapp has its own cache separate from Safari — must remove the home-screen icon and re-add to fully bust.
 
 ## Known Limitations
 
