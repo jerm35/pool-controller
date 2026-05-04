@@ -850,6 +850,11 @@ body {
 
 .schedule-card.disabled { opacity: 0.5; }
 
+.schedule-card.active {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green), 0 0 16px rgba(105, 240, 174, 0.35);
+}
+
 .schedule-time {
   font-family: var(--mono);
   font-size: 1.25rem;

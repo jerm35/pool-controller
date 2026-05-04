@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -602,6 +602,31 @@ function closePumpModal() {
 }
 
 // ---- Rendering: Schedules ----
+// Returns the id of the schedule whose scheduled time is most recently in the past
+// (i.e., the one currently "in force"). Skips disabled schedules and respects day-of-week
+// filters. If no schedule has fired today, falls back to the latest of yesterday's.
+function getActiveScheduleId(schedules) {
+  const enabled = schedules.filter(s => s.enabled && s.time && s.command);
+  if (enabled.length === 0) return null;
+
+  const now = new Date();
+  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const today = dayNames[now.getDay()];
+  const yesterday = dayNames[(now.getDay() + 6) % 7];
+  const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  const appliesOn = (s, d) => !s.days || s.days.length === 0 || s.days.includes(d);
+
+  const todayPassed = enabled
+    .filter(s => appliesOn(s, today) && s.time <= currentTime)
+    .sort((a, b) => b.time.localeCompare(a.time));
+  if (todayPassed.length > 0) return todayPassed[0].id;
+
+  const yesterdayMatched = enabled
+    .filter(s => appliesOn(s, yesterday))
+    .sort((a, b) => b.time.localeCompare(a.time));
+  return yesterdayMatched.length > 0 ? yesterdayMatched[0].id : null;
+}
+
 function renderSchedules() {
   const list = document.getElementById('schedules-list');
   const empty = document.getElementById('no-schedules');
@@ -651,13 +676,15 @@ function renderSchedules() {
 
   // Sort schedules by time starting at midnight
   const sorted = [...state.schedules].sort((a, b) => a.time.localeCompare(b.time));
+  const activeId = getActiveScheduleId(state.schedules);
   const cards = sorted.map(sched => {
     const daysText = sched.days?.length === 7 ? 'Every day' :
       sched.days?.map(d => DAY_NAMES[d] || d).join(' ') || 'Every day';
     const cmdLabel = dynamicLabels[sched.command] || sched.command;
+    const isActive = sched.id === activeId;
 
     return `
-      <div class="schedule-card ${sched.enabled ? '' : 'disabled'}" data-sched-id="${sched.id}">
+      <div class="schedule-card ${sched.enabled ? '' : 'disabled'} ${isActive ? 'active' : ''}" data-sched-id="${sched.id}">
         <div class="schedule-time">${formatTime(sched.time)}</div>
         <div class="schedule-info">
           <div class="schedule-label-text">${sched.label || cmdLabel}</div>
@@ -1162,6 +1189,8 @@ function startAutoRefresh() {
     } catch (_) {
       document.getElementById('status-dot').classList.remove('online');
     }
+    // Refresh schedule highlight off the local clock — purely client-side, no extra fetch.
+    if (state.schedules.length > 0) renderSchedules();
   }, 30000); // every 30s
 }
 
