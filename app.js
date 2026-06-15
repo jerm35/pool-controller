@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -448,7 +448,9 @@ function renderLights() {
     ? `<span class="on-label">● On</span>${activeEffect?.name ? ' — ' + activeEffect.name : ' — Jandy LED WaterColors'}`
     : '<span class="off-label">● Off</span> — Tap a color to turn on';
 
-  offBtn.style.display = isOn ? '' : 'none';
+  // Always show the Off button; disable it when the light is already off
+  offBtn.style.display = '';
+  offBtn.disabled = !isOn;
 
   // Render color effect buttons with per-button color from the LIGHT_EFFECTS table
   const effects = LIGHT_EFFECTS[light.subtype]?.effects || [];
@@ -834,7 +836,8 @@ async function deleteSchedule(id) {
 // ---- Event Handlers ----
 // Turn the pool light off — shared by the Lights tab and the Status Quick Off button
 async function turnOffLight() {
-  const light = state.selectedLight;
+  // Read the freshest device state rather than a possibly-stale reference
+  const light = state.devices.find(d => d.type === '1' || d.type === '2') || state.selectedLight;
   if (!light) {
     toast('No light detected', 'error');
     return;

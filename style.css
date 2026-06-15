@@ -1088,6 +1088,13 @@ select.input optgroup { color: var(--text-dim); }
   transition: all 0.2s;
 }
 
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, var(--cyan-dim), var(--teal));
   color: var(--bg-deep);
