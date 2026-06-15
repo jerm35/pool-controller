@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -832,6 +832,28 @@ async function deleteSchedule(id) {
 }
 
 // ---- Event Handlers ----
+// Turn the pool light off — shared by the Lights tab and the Status Quick Off button
+async function turnOffLight() {
+  const light = state.selectedLight;
+  if (!light) {
+    toast('No light detected', 'error');
+    return;
+  }
+  const isOn = light.state === '1' || light.state === '3';
+  if (!isOn) {
+    toast('Light already off', 'info');
+    return;
+  }
+  const auxNum = light.id.replace('aux_', '');
+  try {
+    await sendCommand(`set_aux_${auxNum}`);
+    state.lightEffect = null;
+    await api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: null }) });
+    document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
+    toast('Light turned off', 'success');
+  } catch (_) {}
+}
+
 function setupEvents() {
   // Tab navigation
   document.querySelectorAll('.tab').forEach(tab => {
@@ -988,18 +1010,22 @@ function setupEvents() {
     });
   });
 
-  // Light Turn Off button
-  document.getElementById('light-off-btn').addEventListener('click', async () => {
-    if (!state.selectedLight) return;
-    const auxNum = state.selectedLight.id.replace('aux_', '');
+  // Light Turn Off button (Lights tab)
+  document.getElementById('light-off-btn').addEventListener('click', turnOffLight);
+
+  // Status tab — Quick Off buttons
+  document.getElementById('status-pump-off-btn').addEventListener('click', async () => {
+    if (pumpCooldownRemaining() > 0) {
+      toast(`Pump cooldown: ${pumpCooldownRemaining()}s`, 'error');
+      return;
+    }
     try {
-      await sendCommand(`set_aux_${auxNum}`);
-      state.lightEffect = null;
-      await api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: null }) });
-      document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
-      toast('Light turned off', 'success');
+      await sendCommand('pool_pump_off');
+      toast('Pump Off', 'success');
+      startPumpCooldown();
     } catch (_) {}
   });
+  document.getElementById('status-lights-off-btn').addEventListener('click', turnOffLight);
 
   // Color effects — tap to turn on with that color (delegated)
   let lightCmdPending = false;

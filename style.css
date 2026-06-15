@@ -488,6 +488,16 @@ body {
   gap: 0.75rem;
 }
 
+.quick-off-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.quick-off-row .btn {
+  padding: 0.85rem;
+}
+
 .setpoint {
   background: var(--bg-card);
   border: 1px solid var(--border);
