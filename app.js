@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -307,7 +307,7 @@ async function refreshAll() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
   try {
-    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect()]);
+    await Promise.all([loadHome(), loadDevices(), loadOneTouch(), loadLightEffect(), loadSchedules()]);
     toast('Refreshed', 'success');
   } catch (e) {
     toast('Refresh failed', 'error');
