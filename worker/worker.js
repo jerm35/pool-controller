@@ -269,6 +269,33 @@ async function handleCommand(env, origin, request) {
     return jsonResponse({ ok: true, data: null, toggled: false, alreadyCorrect: true }, origin);
   }
 
+  // Light off — read FRESH device state, only toggle the aux if the light is on.
+  // Server-side so a stale frontend cache can't block the off command.
+  if (command === 'pool_light_off') {
+    const data = await sendCommand(env, 'get_devices');
+    let light = null;
+    if (data.devices_screen) {
+      for (const item of data.devices_screen.slice(3)) {
+        const key = Object.keys(item)[0];
+        if (key && Array.isArray(item[key])) {
+          const dev = { id: key };
+          for (const prop of item[key]) Object.assign(dev, prop);
+          if (dev.type === '1' || dev.type === '2') { light = dev; break; }
+        }
+      }
+    }
+    if (!light) {
+      return jsonResponse({ ok: false, error: 'No light found' }, origin);
+    }
+    const isOn = light.state === '1' || light.state === '3';
+    if (!isOn) {
+      return jsonResponse({ ok: true, data: null, toggled: false, alreadyCorrect: true }, origin);
+    }
+    const auxNum = light.id.replace('aux_', '');
+    const res = await sendCommand(env, `set_aux_${auxNum}`, {});
+    return jsonResponse({ ok: true, data: res, toggled: true }, origin);
+  }
+
   // Whitelist allowed commands
   const allowed = [
     'set_pool_pump', 'set_pool_heater', 'set_spa_heater',

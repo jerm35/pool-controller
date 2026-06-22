@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -448,9 +448,11 @@ function renderLights() {
     ? `<span class="on-label">● On</span>${activeEffect?.name ? ' — ' + activeEffect.name : ' — Jandy LED WaterColors'}`
     : '<span class="off-label">● Off</span> — Tap a color to turn on';
 
-  // Always show the Off button; disable it when the light is already off
+  // Always show + enable the Off button. The server-side pool_light_off command
+  // checks fresh state and no-ops if already off, so a stale local cache can't
+  // wrongly disable (or wrongly fire) it.
   offBtn.style.display = '';
-  offBtn.disabled = !isOn;
+  offBtn.disabled = false;
 
   // Render color effect buttons with per-button color from the LIGHT_EFFECTS table
   const effects = LIGHT_EFFECTS[light.subtype]?.effects || [];
@@ -836,24 +838,15 @@ async function deleteSchedule(id) {
 // ---- Event Handlers ----
 // Turn the pool light off — shared by the Lights tab and the Status Quick Off button
 async function turnOffLight() {
-  // Read the freshest device state rather than a possibly-stale reference
-  const light = state.devices.find(d => d.type === '1' || d.type === '2') || state.selectedLight;
-  if (!light) {
-    toast('No light detected', 'error');
-    return;
-  }
-  const isOn = light.state === '1' || light.state === '3';
-  if (!isOn) {
-    toast('Light already off', 'info');
-    return;
-  }
-  const auxNum = light.id.replace('aux_', '');
+  // Off decision is made server-side (pool_light_off reads FRESH device state),
+  // so a stale local cache can never block the command. We just clear UI state.
   try {
-    await sendCommand(`set_aux_${auxNum}`);
+    const resp = await sendCommand('pool_light_off');
     state.lightEffect = null;
     await api('/pool/light-effect', { method: 'POST', body: JSON.stringify({ effect: null }) });
     document.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
-    toast('Light turned off', 'success');
+    toast(resp.toggled === false ? 'Light already off' : 'Light turned off',
+          resp.toggled === false ? 'info' : 'success');
   } catch (_) {}
 }
 

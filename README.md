@@ -7,7 +7,7 @@ Custom iAqualink pool management dashboard for Jandy AqualinkRS controllers. Mob
 ## Features
 
 - **Status** — Pool/air temperature, animated temperature ring, Pool Pump button (tap → speed picker modal with all OneTouch presets), Temp 1 and Temp 2 heater toggles (mutually exclusive — single-heater system), 🔥 indicator when heater is actively firing, freeze protection indicator, +/- temperature setpoint controls with edit-lock, plus a **Quick Off** row (Pump Off / Lights Off) below Setpoints
-- **Lights** — Jandy LED WaterColors with all 14 color effects, always-visible grid, tap to activate, active color synced across devices via KV, 3-second cooldown between color changes. Always-visible **Turn Off** button (dimmed/disabled when the light is already off)
+- **Lights** — Jandy LED WaterColors with all 14 color effects, always-visible grid, tap to activate, active color synced across devices via KV, 3-second cooldown between color changes. Always-visible **Turn Off** button (off-only safety enforced server-side by `pool_light_off`)
 - **Speed** — OneTouch quick-action buttons (PUMPHIGH, PUMPLOW, CLEAN, All OFF), auxiliary device toggles (filtered to active/labeled only). 30-second pump cooldown enforced.
 - **Schedule** — Visual scheduler with Pump High/Low speed commands, Pump On/Off, Heater On/Off, OneTouch presets. Sorted by time. Bulk **All On / All Off** button. Custom OneTouch labels shown. Edit/delete/toggle per schedule. Runs on Cloudflare Worker cron (every minute, Pacific time)
 - **Panel** — Opens the full AqualinkRS WebTouch remote panel via Cloud Run (auto-authenticated, no login required). View/edit controller schedules, individual pump speed presets (Pool Low/High, Speed3-8, etc.), OneTouch configuration, and diagnostics
@@ -54,6 +54,7 @@ The worker provides state-aware commands that prevent toggle issues:
 | `pool_pump_off` | Checks state, only toggles if pump is on |
 | `pool_heater_on` | Checks state, only toggles if heater is off |
 | `pool_heater_off` | Checks state, only toggles if heater is on |
+| `pool_light_off` | Reads fresh device state, only toggles the light aux if it's on (off-only) |
 
 The cron scheduler checks live OneTouch API state before firing speed commands to avoid toggling off an already-active speed preset.
 
