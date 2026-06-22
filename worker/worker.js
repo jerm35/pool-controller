@@ -697,6 +697,28 @@ async function handleScheduledEvent(env) {
           }
         }
 
+      } else if (sched.command === 'pool_light_off') {
+        // Off-only: read fresh device state, toggle the light aux only if it's on
+        const data = await sendCommand(env, 'get_devices');
+        let light = null;
+        if (data.devices_screen) {
+          for (const item of data.devices_screen.slice(3)) {
+            const key = Object.keys(item)[0];
+            if (key && Array.isArray(item[key])) {
+              const dev = { id: key };
+              for (const prop of item[key]) Object.assign(dev, prop);
+              if (dev.type === '1' || dev.type === '2') { light = dev; break; }
+            }
+          }
+        }
+        const lightOn = light && (light.state === '1' || light.state === '3');
+        if (lightOn) {
+          await sendCommand(env, `set_aux_${light.id.replace('aux_', '')}`);
+          console.log(`[schedule] Light off — toggled ${light.id}`);
+        } else {
+          console.log(`[schedule] Light already off, skipping`);
+        }
+
       } else {
         const mapped = onOffMap[sched.command];
         if (mapped) {

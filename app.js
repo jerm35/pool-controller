@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -125,6 +125,7 @@ const COMMAND_LABELS = {
   pool_pump_off: 'Pump Off',
   pool_heater_on: 'Heater On',
   pool_heater_off: 'Heater Off',
+  pool_light_off: 'Lights Off',
   set_onetouch_2: 'OneTouch 2',
   set_onetouch_3: 'OneTouch 3',
   set_onetouch_4: 'OneTouch 4',
