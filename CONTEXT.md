@@ -273,6 +273,7 @@ Per Jandy ePump documentation, minimum 30 seconds between speed changes allows t
 - After any command: refreshes all data at 2s and 5s delays
 - Light effect and pump speed derived from live API data on every refresh
 - During setpoint editing: an `edit-lock` prevents the auto-refresh from overwriting in-progress +/- changes
+- **Schedules** are fetched on initial `connect()` *and* by the manual Refresh button (`refreshAll` calls `loadSchedules`). This is how a schedule added on one device shows up on another — tap Refresh, or fully reopen the app. The 30s auto-poll does **not** re-fetch schedules (keeps KV reads down).
 
 ### Cache Busting
 
