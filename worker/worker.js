@@ -93,6 +93,9 @@ async function getSession(env) {
     `${DEVICES_URL}?api_key=${IAQUALINK_API_KEY}&authentication_token=${session.authToken}&user_id=${session.userId}`,
     { headers: { 'User-Agent': 'okhttp/3.14.7' } }
   );
+  if (!devResp.ok) {
+    throw new Error(`Device list failed: ${devResp.status}`);
+  }
   const devices = await devResp.json();
   if (devices && devices.length > 0) {
     const dev = devices[0];
@@ -101,6 +104,15 @@ async function getSession(env) {
     session.name = dev.name;
     // Store full device info for WebTouch
     session.device = dev;
+  }
+
+  // NEVER cache a session without a serial. Without this guard an upstream blip on
+  // the device-list call above cached a serial-less session for the full hour TTL;
+  // every later sendCommand then sent `serial=undefined`, so the dashboard loaded
+  // but stayed empty until the TTL expired. Failing one request loudly beats
+  // failing every request silently for an hour.
+  if (!session.serial) {
+    throw new Error('Login succeeded but no device serial was returned');
   }
 
   await env.POOL_KV.put('session', JSON.stringify(session), { expirationTtl: 3600 });

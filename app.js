@@ -4,7 +4,7 @@
  */
 
 // ---- Configuration ----
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 const API_BASE = 'https://pool-controller.jburnett-589.workers.dev';
 
 // Light effect maps by subtype
@@ -176,20 +176,47 @@ function startPumpCooldown() {
 }
 
 // ---- API Helpers ----
+const API_TIMEOUT_MS = 15000;
+
+// Retry is deliberately NOT applied to every request. Every iAqualink command is a
+// TOGGLE (see CLAUDE.md), so re-sending a failed POST /pool/command can flip a relay
+// twice and leave the pump or heater in the opposite state. Only reads and the
+// idempotent login POST are safe to repeat.
+function isRetryable(path, method) {
+  return method === 'GET' || path === '/auth/login';
+}
+
 async function api(path, options = {}) {
-  const resp = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    mode: 'cors',
-  });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    throw new Error(`API ${resp.status}: ${text || resp.statusText}`);
+  const method = (options.method || 'GET').toUpperCase();
+  const attempts = isRetryable(path, method) ? 3 : 1;
+  let lastErr;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const resp = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        mode: 'cors',
+        // Without this a hung upstream hung the connect spinner indefinitely.
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`API ${resp.status}: ${text || resp.statusText}`);
+      }
+      return await resp.json();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < attempts) {
+        console.warn(`api ${method} ${path} attempt ${attempt} failed, retrying:`, e.message);
+        await new Promise((r) => setTimeout(r, 500 * attempt)); // 500ms, then 1000ms
+      }
+    }
   }
-  return resp.json();
+  throw lastErr;
 }
 
 function toast(message, type = 'info') {
